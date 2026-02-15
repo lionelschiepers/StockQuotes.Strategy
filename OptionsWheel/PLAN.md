@@ -19,10 +19,11 @@ This plan outlines the process for filtering a list of stock tickers based on pr
 ### Phase 2: Sequential Deep Analysis
 - **Goal:** Calculate technical indicators for candidate stocks.
 - **Method:** For each ticker in the Candidate List:
-    1. Fetch historical data for the last 90 days using the custom API: `https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical?ticker={symbol}&from={start_date}&to={end_date}`.
-    2. This URL is preferred as it is easily consumed by Python scripts and returns data in a structured format (use the `quotes` field from the response).
-    3. Calculate **EMA50**, **ADX(14)**, **RSI(14)**, and **MACD**.
-    4. Retrieve `RSI_today` and `RSI_3_days_ago`.
+    1. Display progression status (e.g., "Analyzing 10/150: AAPL...").
+    2. Fetch historical data for the last 90 days using the custom API: `https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical?ticker={symbol}&from={start_date}&to={end_date}`.
+    3. This URL is preferred as it is easily consumed by Python scripts and returns data in a structured format (use the `quotes` field from the response).
+    4. Calculate **EMA50**, **ADX(14)**, **RSI(14)**, **MACD(12,26,9)**, and **RVI(10,14)**.
+    5. Retrieve `RSI_today` and `RSI_3_days_ago`.
 - **Validation:** Ensure the ticker has at least 60 days of historical data to allow for stable indicator calculation.
 
 ### Phase 3: Criteria Filtering
@@ -36,7 +37,7 @@ Apply the following strict filters to each candidate:
 ### Phase 4: Aggregation & Sorting
 - **Calculation:** `DiffPct = ((Price - EMA50) / EMA50) * 100`.
 - **Sorting:** Order result list **Ascending** by `DiffPct`.
-- **Reporting:** Generate the final summary table.
+- **Reporting:** Generate the final summary table including RVI and MACD (Fast/Signal).
 
 ## 3. Detailed Technical Specifications
 
@@ -47,6 +48,7 @@ Apply the following strict filters to each candidate:
 | **RSI** | 14 | Relative Strength Index; ensure price isn't overbought/oversold. |
 | **RSI Trend**| 3d | Compare current bar RSI vs the bar from 3 trading sessions prior. |
 | **MACD** | 12,26,9| Moving Average Convergence Divergence with Signal line. |
+| **RVI** | 10,14 | Relative Volatility Index (Dorsey); 10-period StdDev, 14-period smoothing. |
 
 ### RSI Calculation (Wilder's Smoothing)
 Use Wilder's smoothing method (not simple SMA)

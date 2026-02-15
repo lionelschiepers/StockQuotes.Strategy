@@ -37,7 +37,9 @@ Apply the following strict filters to each candidate:
 ### Phase 4: Aggregation & Sorting
 - **Calculation:** `DiffPct = ((Price - EMA50) / EMA50) * 100`.
 - **Sorting:** Order result list **Ascending** by `DiffPct`.
-- **Reporting:** Generate the final summary table including RVI and MACD (Fast/Signal).
+- **Reporting:** 
+    - Generate the final summary table for candidates meeting all criteria (includes RVI and MACD).
+    - Generate a "Near Misses" table for stocks failing exactly one criterion, including the `Name`, `RVI`, and the `Failed Criterion`.
 
 ## 3. Detailed Technical Specifications
 

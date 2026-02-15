@@ -8,9 +8,10 @@ import json
 # Configuration
 BATCH_SIZE = 50
 PRICE_LIMIT = 100
-HIST_DAYS = 90
+HIST_DAYS = 120
 BASE_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance"
 HIST_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical"
+SLEEP_TIME = 0.1
 
 def get_tickers():
     with open('tickers.json', 'r') as f:
@@ -21,7 +22,7 @@ def safe_get(url):
         try:
             response = requests.get(url)
             if response.status_code == 429:
-                retry_after = response.json().get('retryAfter', 5)
+                retry_after = int(response.headers.get('Retry-After', 5))
                 print(f"Rate limited. Waiting {retry_after} seconds...")
                 time.sleep(retry_after)
                 continue
@@ -47,7 +48,7 @@ def batch_price_filter(tickers):
                         'price': price,
                         'name': item.get('shortName', '')
                     })
-        time.sleep(0.5)
+        time.sleep(SLEEP_TIME)
     return candidates
 
 def calculate_ema(series, span):
@@ -111,6 +112,7 @@ def calculate_rvi(series, std_period=10, smooth_period=14):
 
 def deep_analysis(candidates):
     results = []
+    near_misses = []
     end_date = datetime(2026, 2, 15)
     start_date = end_date - timedelta(days=HIST_DAYS)
     
@@ -127,7 +129,7 @@ def deep_analysis(candidates):
             continue
             
         quotes = data.get('quotes', [])
-        if len(quotes) < 50:
+        if len(quotes) < 60:
             continue
             
         df = pd.DataFrame(quotes)
@@ -152,24 +154,39 @@ def deep_analysis(candidates):
         macd, macd_signal = calculate_macd(close)
         rvi = calculate_rvi(close, 10, 14).iloc[-1]
         
-        # Filters
-        if price > ema50 and adx < 30 and 30 <= rsi_today <= 50:
-            if rsi_3d_ago is not None and rsi_today > rsi_3d_ago:
-                diff_pct = ((price - ema50) / ema50) * 100
-                results.append({
-                    'Symbol': symbol,
-                    'Name': c['name'],
-                    'Price': round(price, 2),
-                    'EMA50': round(ema50, 2),
-                    'ADX': round(adx, 2),
-                    'RSI': round(rsi_today, 2),
-                    'RVI': round(rvi, 2),
-                    'MACD': round(macd.iloc[-1], 2),
-                    'Signal': round(macd_signal.iloc[-1], 2),
-                    'DiffPct': round(diff_pct, 2)
-                })
-        time.sleep(0.5)
-    return results
+        # Criteria definitions
+        conds = {
+            "Price > EMA50": price > ema50,
+            "ADX < 30": adx < 30,
+            "30 <= RSI <= 50": 30 <= rsi_today <= 50,
+            "RSI Rising (3d)": rsi_3d_ago is not None and rsi_today > rsi_3d_ago
+        }
+        
+        passed = [name for name, val in conds.items() if val]
+        failed = [name for name, val in conds.items() if not val]
+        
+        res_data = {
+            'Symbol': symbol,
+            'Name': c['name'],
+            'Price': round(price, 2),
+            'EMA50': round(ema50, 2),
+            'ADX': round(adx, 2),
+            'RSI': round(rsi_today, 2),
+            'RVI': round(rvi, 2),
+            'MACD': round(macd.iloc[-1], 2),
+            'Signal': round(macd_signal.iloc[-1], 2),
+            'DiffPct': round(((price - ema50) / ema50) * 100, 2)
+        }
+
+        if len(failed) == 0:
+            results.append(res_data)
+        elif len(failed) == 1:
+            res_data['Failed Criterion'] = failed[0]
+            near_misses.append(res_data)
+            
+        time.sleep(SLEEP_TIME)
+        
+    return results, near_misses
 
 def main():
     print("Fetching tickers...")
@@ -180,17 +197,26 @@ def main():
     print(f"Found {len(candidates)} candidates.")
     
     print("Phase 2 & 3: Deep analysis and filtering...")
-    final_results = deep_analysis(candidates)
+    final_results, near_misses = deep_analysis(candidates)
     
     print("Phase 4: Sorting and Reporting...")
     final_results.sort(key=lambda x: x['DiffPct'])
+    near_misses.sort(key=lambda x: x['DiffPct'])
     
-    df_results = pd.DataFrame(final_results)
-    if not df_results.empty:
-        print("\nFinal Report:")
-        print(df_results.to_string(index=False))
+    if final_results:
+        print("\nFinal Report (All Criteria Met):")
+        print(pd.DataFrame(final_results).to_string(index=False))
     else:
-        print("\nNo stocks matched the criteria.")
+        print("\nNo stocks matched all criteria.")
+        
+    if near_misses:
+        print("\nNear Misses (Exactly One Criterion Failed):")
+        # Displaying a subset of columns for readability
+        df_near = pd.DataFrame(near_misses)
+        cols = ['Symbol', 'Name', 'Price', 'EMA50', 'ADX', 'RSI', 'RVI', 'DiffPct', 'Failed Criterion']
+        print(df_near[cols].to_string(index=False))
+    else:
+        print("\nNo near misses found.")
 
 if __name__ == "__main__":
     main()

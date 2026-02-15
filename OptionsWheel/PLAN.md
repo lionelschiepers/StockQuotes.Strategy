@@ -1,18 +1,19 @@
 # Stock Analysis Plan: Momentum & Trend Filter
 
-This plan outlines the process for filtering a list of stock tickers based on price and technical indicators using the `stock-quotes` MCP.
+This plan outlines the process for filtering a list of stock tickers based on price and technical indicators using Python scripts and custom APIs.
 
 ## 1. Prerequisites & Environment
-- **MCP Toolset:** Ensure `stock-quotes` is active and accessible.
-- **Python Dependencies:** `pandas` and `numpy` for technical indicator calculations.
-- **Rate Limit Management:** Only sequential calls are allowed. Implement a small sleep (e.g., 0.1s) between historical data calls if the API starts rejecting requests.
+- **Environment:** Python 3.x.
+- **Python Dependencies:** `requests`, `pandas`, and `numpy`.
+- **API Access:** Use the provided bulk and historical quote APIs.
+- **Rate Limit Management:** Implement a small sleep (e.g., 0.1s) between API calls to avoid rate limiting.
 
 ## 2. Execution Phases
 
 ### Phase 1: Batch Screening (Price Filter)
 - **Goal:** Quickly eliminate stocks > $100.
-- **Method:** Use `get_stock_quotes` in batches of 50 tickers. required fields to load are: symbol, regularMarketPrice, shortName.
-- **Logic:** Only pass tickers where `regularMarketPrice < 100` to Phase 2. Keep the top 10 in term of volume.
+- **Method:** Use a Python script to fetch data from `https://stockquote.lionelschiepers.synology.me/api/yahoo-finance?symbols={symbols}&fields=symbol,shortName,regularMarketPrice` in batches of 50 tickers.
+- **Logic:** Only pass tickers where `regularMarketPrice < 100` to Phase 2.
 - **Output:** A list of "Candidate Tickers".
 
 ### Phase 2: Sequential Deep Analysis

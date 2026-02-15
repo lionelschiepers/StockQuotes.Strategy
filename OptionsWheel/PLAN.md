@@ -29,7 +29,7 @@ This plan outlines the process for filtering a list of stock tickers based on pr
 ### Phase 3: Criteria Filtering
 Apply the following strict filters to each candidate:
 1. **Price Check:** `Price < 100`.
-2. **EMA Trend:** `Price > EMA50`.
+2. **EMA Trend:** `Price < EMA50`.
 3. **ADX Strength:** `ADX < 30` (Indicating a non-trending or early-trend state).
 4. **RSI Range:** `30 <= RSI <= 50`.
 5. **RSI Momentum:** `RSI_today > RSI_3_days_ago`.
@@ -38,8 +38,10 @@ Apply the following strict filters to each candidate:
 - **Calculation:** `DiffPct = ((Price - EMA50) / EMA50) * 100`.
 - **Sorting:** Order result list **Ascending** by `DiffPct`.
 - **Reporting:** 
-    - Generate the final summary table for candidates meeting all criteria (includes RVI and MACD).
-    - Generate a "Near Misses" table for stocks failing exactly one criterion, including the `Name`, `RVI`, and the `Failed Criterion`.
+    - Generate a **Full Summary Table** combining both candidates meeting all criteria and "Near Misses" (failing exactly one criterion).
+    - Include a `Status` column (PASS/NEAR) and a `Failed Criterion` column (where applicable).
+    - Sorting: Order the combined list **Ascending** by `DiffPct`.
+    - Ensure columns like `RVI` and `MACD` are included in the final report.
 
 ## 3. Detailed Technical Specifications
 

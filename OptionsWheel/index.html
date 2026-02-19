@@ -98,7 +98,7 @@
                     const tableBody = document.getElementById('tableBody');
                     tableBody.innerHTML = data.results.map(r => `
                         <tr class="hover:bg-gray-50 transition-colors">
-                            <td class="px-4 py-4 font-bold text-blue-600">${r.Symbol}</td>
+                            <td class="px-4 py-4 font-bold text-blue-600"><a href="https://finance.yahoo.com/quote/${r.Symbol}/" target="_blank" class="hover:underline">${r.Symbol}</a></td>
                             <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${r.Name}">${r.Name}</td>
                             <td class="px-4 py-4">
                                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${r.Status === 'PASS' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}">

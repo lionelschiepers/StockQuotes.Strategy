@@ -31,7 +31,7 @@ Apply the following strict filters to each candidate:
 1. **Price Check:** `Price < 100`.
 2. **EMA Trend:** `Price < EMA50`.
 3. **ADX Strength:** `ADX < 30` (Indicating a non-trending or early-trend state).
-4. **RSI Range:** `30 <= RSI <= 50`.
+4. **RSI Range:** `15 <= RSI <= 35`.
 5. **RSI Momentum:** `RSI_today > RSI_3_days_ago`.
 
 ### Phase 4: Aggregation & Sorting
@@ -42,6 +42,15 @@ Apply the following strict filters to each candidate:
     - Include a `Status` column (PASS/NEAR) and a `Failed Criterion` column (where applicable).
     - Sorting: Order the combined list **Ascending** by `DiffPct`.
     - Ensure columns like `RVI` and `MACD` are included in the final report.
+
+### Phase 5: Web Reporting
+- **Goal:** Provide a user-friendly, interactive interface to view analysis results.
+- **Method:** Create an `index.html` page that loads `analysis_results.json`.
+- **Features:**
+    - Summary dashboard showing totals (Analyzed, Candidates, Passed, Near Misses).
+    - Sortable data table containing all technical indicators.
+    - Visual indicators for Status (PASS/NEAR) and price vs. EMA trends.
+    - Search and pagination for easy navigation.
 
 ## 3. Detailed Technical Specifications
 

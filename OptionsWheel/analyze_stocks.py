@@ -7,7 +7,7 @@ import json
 
 # Configuration
 BATCH_SIZE = 50
-PRICE_LIMIT = 100
+PRICE_LIMIT = 500
 HIST_DAYS = 120
 BASE_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance"
 HIST_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical"
@@ -113,16 +113,17 @@ def calculate_rvi(series, std_period=10, smooth_period=14):
 def deep_analysis(candidates):
     results = []
     near_misses = []
-    end_date = datetime(2026, 2, 15)
+    end_date = datetime.now()
     start_date = end_date - timedelta(days=HIST_DAYS)
     
     start_str = start_date.strftime('%Y-%m-%d')
     end_str = end_date.strftime('%Y-%m-%d')
     
     total = len(candidates)
+    print(f"Analyzing {total} candidates from {start_str} to {end_str}")
     for idx, c in enumerate(candidates, 1):
         symbol = c['symbol']
-        print(f"[{idx}/{total}] Analyzing {symbol}...", end='\r', flush=True)
+        print(f"[{idx}/{total}] Analyzing {symbol}...            ", end='\r', flush=True)
         url = f"{HIST_URL}?ticker={symbol}&from={start_str}&to={end_str}"
         data = safe_get(url)
         if not data:
@@ -156,13 +157,12 @@ def deep_analysis(candidates):
         
         # Criteria definitions
         conds = {
-            "Price > EMA50": price > ema50,
+            "Price < EMA50": price < ema50,
             "ADX < 30": adx < 30,
-            "30 <= RSI <= 50": 30 <= rsi_today <= 50,
+            "15 <= RSI <= 35": 15 <= rsi_today <= 35,
             "RSI Rising (3d)": rsi_3d_ago is not None and rsi_today > rsi_3d_ago
         }
         
-        passed = [name for name, val in conds.items() if val]
         failed = [name for name, val in conds.items() if not val]
         
         res_data = {
@@ -175,13 +175,14 @@ def deep_analysis(candidates):
             'RVI': round(rvi, 2),
             'MACD': round(macd.iloc[-1], 2),
             'Signal': round(macd_signal.iloc[-1], 2),
-            'DiffPct': round(((price - ema50) / ema50) * 100, 2)
+            'DiffPct': round(((price - ema50) / ema50) * 100, 2),
+            'Status': 'PASS' if len(failed) == 0 else 'NEAR',
+            'Failed Criterion': failed[0] if len(failed) == 1 else ''
         }
 
         if len(failed) == 0:
             results.append(res_data)
         elif len(failed) == 1:
-            res_data['Failed Criterion'] = failed[0]
             near_misses.append(res_data)
             
         time.sleep(SLEEP_TIME)
@@ -200,23 +201,31 @@ def main():
     final_results, near_misses = deep_analysis(candidates)
     
     print("Phase 4: Sorting and Reporting...")
-    final_results.sort(key=lambda x: x['DiffPct'])
-    near_misses.sort(key=lambda x: x['DiffPct'])
+    combined_results = final_results + near_misses
+    combined_results.sort(key=lambda x: x['DiffPct'])
     
-    if final_results:
-        print("\nFinal Report (All Criteria Met):")
-        print(pd.DataFrame(final_results).to_string(index=False))
+    if combined_results:
+        print("\nFull Summary Table (Sorted by DiffPct):")
+        df = pd.DataFrame(combined_results)
+        # Reorder columns for better display
+        cols = ['Symbol', 'Name', 'Status', 'Price', 'EMA50', 'DiffPct', 'ADX', 'RSI', 'RVI', 'MACD', 'Failed Criterion']
+        print(df[cols].to_string(index=False))
     else:
-        print("\nNo stocks matched all criteria.")
-        
-    if near_misses:
-        print("\nNear Misses (Exactly One Criterion Failed):")
-        # Displaying a subset of columns for readability
-        df_near = pd.DataFrame(near_misses)
-        cols = ['Symbol', 'Name', 'Price', 'EMA50', 'ADX', 'RSI', 'RVI', 'DiffPct', 'Failed Criterion']
-        print(df_near[cols].to_string(index=False))
-    else:
-        print("\nNo near misses found.")
+        print("\nNo stocks matched the criteria or were near misses.")
+
+    # Save results to JSON
+    output = {
+        "timestamp": datetime.now().isoformat(),
+        "total_tickers_analyzed": len(tickers),
+        "candidates_after_phase1": len(candidates),
+        "passed_all_criteria": len(final_results),
+        "near_misses": len(near_misses),
+        "results": combined_results
+    }
+    
+    with open('analysis_results.json', 'w') as f:
+        json.dump(output, f, indent=2)
+    print(f"\nResults saved to analysis_results.json")
 
 if __name__ == "__main__":
     main()

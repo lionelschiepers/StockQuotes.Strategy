@@ -194,26 +194,41 @@
                 const data = await response.json();
                 
                 const price = r.Price;
-                const targetStrike = price * 0.99;
+                const targetStrike = price * 0.93;
                 
                 const options = data.options || [];
 
-                const puts = Array.isArray(options) && options.length > 0 ? options[0].puts : undefined;
-                const validPut = puts ? puts.find(opt => opt.strike <= targetStrike) : undefined;
+                const puts1 = Array.isArray(options) && options.length > 0 ? options[0].puts : undefined;
+                const validPut1 = puts1 ? puts1.find(opt => opt.strike <= targetStrike) : undefined;
                 
-                if (validPut) {
-                    const returnPct = (validPut.lastPrice / price) * 100;
-                    cell.innerHTML = `<span class="font-mono text-gray-700">${returnPct.toFixed(2)}%</span>`;
+                const puts2 = Array.isArray(options) && options.length > 1 ? options[1].puts : undefined;
+                const validPut2 = puts2 ? puts2.find(opt => opt.strike <= targetStrike) : undefined;
+                
+                let html = '';
+                if (validPut1) {
+                    const returnPct1 = (validPut1.lastPrice / price) * 100;
+                    html += `<span class="font-mono text-gray-700">${returnPct1.toFixed(2)}%</span>`;
                 } else {
-                    cell.innerHTML = '<span class="text-gray-400">—</span>';
+                    html += '<span class="text-gray-400">—</span>';
                 }
+                
+                html += ' / ';
+                
+                if (validPut2) {
+                    const returnPct2 = (validPut2.lastPrice / price) * 100;
+                    html += `<span class="font-mono text-gray-700">${returnPct2.toFixed(2)}%</span>`;
+                } else {
+                    html += '<span class="text-gray-400">—</span>';
+                }
+                
+                cell.innerHTML = html;
             } catch (e) {
                 cell.innerHTML = '<span class="text-gray-400">Error</span>';
             }
         }
 
         async function checkPutOptions(results, maxConcurrent = 2) {
-            const optionsApiUrl = 'https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options?ticker={TICKER}&filter=puts&limit=8';
+            const optionsApiUrl = 'https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options?ticker={TICKER}&filter=puts&limit=8&expirationDatesCount=2';
             
             results.forEach(r => {
                 const cell = document.querySelector(`.put-option-cell[data-symbol="${r.Symbol}"]`);

@@ -228,7 +228,7 @@
         }
 
         async function checkPutOptions(results, maxConcurrent = 2) {
-            const optionsApiUrl = 'https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options?ticker={TICKER}&filter=puts&limit=8&expirationDatesCount=2';
+            const optionsApiUrl = 'https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options?ticker={TICKER}&filter=puts&limit=10&expirationDatesCount=2';
             
             results.forEach(r => {
                 const cell = document.querySelector(`.put-option-cell[data-symbol="${r.Symbol}"]`);
@@ -239,7 +239,7 @@
                 const batch = results.slice(i, i + maxConcurrent);
                 await Promise.all(batch.map(r => checkSinglePutOption(r, optionsApiUrl)));
                 if (i + maxConcurrent < results.length) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 1));
                 }
             }
         }

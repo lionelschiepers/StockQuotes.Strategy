@@ -51,6 +51,11 @@ Apply the following strict filters to each candidate:
     - Sortable data table containing all technical indicators.
     - Visual indicators for Status (PASS/NEAR) and price vs. EMA trends.
     - Search and pagination for easy navigation.
+    - **Put Options Column:** For each ticker, fetches put options from the API and checks if a valid put exists with:
+        - Strike >= 8% below regular price (strike >= price * 0.92)
+        - Last price >= 0.5% of regular price (lastPrice >= price * 0.005)
+    - Displays "Yes" (green) or "No" (red) badge based on availability of qualifying puts.
+    - API: `https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options?ticker={TICKER}&filter=puts&limit=8`
 
 ## 3. Detailed Technical Specifications
 

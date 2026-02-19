@@ -51,6 +51,7 @@
                         <th class="px-4 py-3 font-semibold text-gray-700">RVI</th>
                         <th class="px-4 py-3 font-semibold text-gray-700">MACD</th>
                         <th class="px-4 py-3 font-semibold text-gray-700">Failed Criterion</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">Put Option</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody" class="divide-y divide-gray-200">
@@ -114,14 +115,20 @@
                             <td class="px-4 py-4 text-gray-600">${r.RVI.toFixed(2)}</td>
                             <td class="px-4 py-4 text-gray-600">${r.MACD.toFixed(2)}</td>
                             <td class="px-4 py-4 text-xs text-gray-400 italic">${r['Failed Criterion'] || '<span class="text-gray-200">—</span>'}</td>
+                            <td class="px-4 py-4 put-option-cell" data-symbol="${r.Symbol}" data-price="${r.Price}">
+                                <span class="text-gray-400">Loading...</span>
+                            </td>
                         </tr>
                     `).join('');
 
                     // Initialize DataTable
-                    $('#resultsTable').DataTable({
+                    const table = $('#resultsTable').DataTable({
                         pageLength: 25,
                         order: [[2, 'asc'], [5, 'asc']], // Default sort: Status then DiffPct
                         responsive: true,
+                        columnDefs: [
+                            { targets: 11, orderable: false }
+                        ],
                         language: {
                             searchPlaceholder: "Search tickers...",
                             search: ""
@@ -130,6 +137,21 @@
                     
                     // Style the search box
                     $('.dataTables_filter input').addClass('bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4');
+
+                    // Fetch put options on draw (sort, filter, page change)
+                    table.on('draw', function() {
+                        const visibleCells = document.querySelectorAll('.put-option-cell');
+                        const visibleRows = [];
+                        visibleCells.forEach(cell => {
+                            const symbol = cell.dataset.symbol;
+                            const row = data.results.find(r => r.Symbol === symbol);
+                            if (row) visibleRows.push(row);
+                        });
+                        checkPutOptions(visibleRows);
+                    });
+
+                    // Initial fetch
+                    checkPutOptions(data.results);
                 })
                 .catch(error => {
                     console.error('Error loading JSON:', error);
@@ -140,7 +162,72 @@
                         </div>
                     `;
                 });
-        });
+                });
+
+        async function fetchWithRetry(url, maxRetries = 3, baseDelay = 1000) {
+            for (let attempt = 0; attempt < maxRetries; attempt++) {
+                const response = await fetch(url);
+                if (response.ok) return response;
+                if (response.status === 429) {
+                    const retryAfter = response.headers.get('Retry-After');
+                    let delay;
+                    if (retryAfter) {
+                        const seconds = parseInt(retryAfter, 10);
+                        delay = isNaN(seconds) ? baseDelay * Math.pow(2, attempt) : seconds * 1000;
+                    } else {
+                        delay = baseDelay * Math.pow(2, attempt);
+                    }
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    continue;
+                }
+                throw new Error(`HTTP ${response.status}`);
+            }
+            throw new Error('Max retries exceeded');
+        }
+
+        async function checkSinglePutOption(r, optionsApiUrl) {
+            const cell = document.querySelector(`.put-option-cell[data-symbol="${r.Symbol}"]`);
+            if (!cell) return;
+            
+            try {
+                const response = await fetchWithRetry(optionsApiUrl.replace('{TICKER}', r.Symbol));
+                const data = await response.json();
+                
+                const price = r.Price;
+                const targetStrike = price * 0.99;
+                
+                const options = data.options || [];
+
+                const puts = Array.isArray(options) && options.length > 0 ? options[0].puts : undefined;
+                const validPut = puts ? puts.find(opt => opt.strike <= targetStrike) : undefined;
+                
+                if (validPut) {
+                    const returnPct = (validPut.lastPrice / price) * 100;
+                    cell.innerHTML = `<span class="font-mono text-gray-700">${returnPct.toFixed(2)}%</span>`;
+                } else {
+                    cell.innerHTML = '<span class="text-gray-400">—</span>';
+                }
+            } catch (e) {
+                cell.innerHTML = '<span class="text-gray-400">Error</span>';
+            }
+        }
+
+        async function checkPutOptions(results, maxConcurrent = 2) {
+            const optionsApiUrl = 'https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options?ticker={TICKER}&filter=puts&limit=8';
+            
+            results.forEach(r => {
+                const cell = document.querySelector(`.put-option-cell[data-symbol="${r.Symbol}"]`);
+                if (cell) cell.innerHTML = '<span class="text-gray-400">Loading...</span>';
+            });
+            
+            for (let i = 0; i < results.length; i += maxConcurrent) {
+                const batch = results.slice(i, i + maxConcurrent);
+                await Promise.all(batch.map(r => checkSinglePutOption(r, optionsApiUrl)));
+                if (i + maxConcurrent < results.length) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
     </script>
 </body>
 </html>

@@ -48,14 +48,15 @@ OPTIONS_URL = (
 SLEEP_TIME = 0.0
 MAX_WORKERS = 4
 REQUEST_TIMEOUT = 15
-MAX_RETRIES = 6
+MAX_RETRIES = 3
 OPTIONS_REQUEST_TIMEOUT = 25
-OPTIONS_MAX_RETRIES = 8
+OPTIONS_MAX_RETRIES = 3
 DEBUG = False
 
 DEFAULT_SCREENING_CONFIG = {
     "MAX_PRICE": 80.0,
     "TARGET_MONTHLY_YIELD_PCT": 1.0,
+    "MIN_PREMIUM": 0.15,
     "MIN_DTE": 20,
     "MAX_DTE": 60,
     "MIN_OTM_PCT": 5.0,
@@ -134,6 +135,9 @@ def validate_screening_config(cfg):
     if cfg["MAX_PRICE"] <= 0 or cfg["MAX_PRICE"] > 10000:
         errors.append("MAX_PRICE must be in (0, 10000].")
 
+    if cfg["MIN_PREMIUM"] <= 0 or cfg["MIN_PREMIUM"] > 100:
+        errors.append("MIN_PREMIUM must be in (0, 100].")
+
     if cfg["MIN_DTE"] < 1:
         errors.append("MIN_DTE must be >= 1.")
     if cfg["MAX_DTE"] < cfg["MIN_DTE"]:
@@ -185,6 +189,7 @@ SCREENING_CONFIG = validate_screening_config(
 # Options-first screening parameters
 TARGET_MONTHLY_YIELD_PCT = SCREENING_CONFIG["TARGET_MONTHLY_YIELD_PCT"]
 PRICE_LIMIT = SCREENING_CONFIG["MAX_PRICE"]
+MIN_PREMIUM = SCREENING_CONFIG["MIN_PREMIUM"]
 MIN_DTE = SCREENING_CONFIG["MIN_DTE"]
 MAX_DTE = SCREENING_CONFIG["MAX_DTE"]
 MIN_OTM_PCT = SCREENING_CONFIG["MIN_OTM_PCT"]
@@ -345,7 +350,7 @@ def safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES):
 
             if response.status_code >= 500:
                 _bump_error_stat("http_5xx")
-                backoff = min(0.25 * (2**attempt), 5.0)
+                backoff = min(0.52 * (2**attempt), 5.0)
                 debug_log(
                     f"HTTP {response.status_code} on attempt {attempt + 1}/{max_retries}; "
                     f"backoff={backoff:.2f}s; body={_shorten_response_text(response.text)}"
@@ -708,6 +713,7 @@ def _evaluate_put_contract(symbol_data, expiration_dt, option, now_dt):
 
     checks = {
         "Yield >= 1%/month": monthly_yield_pct >= TARGET_MONTHLY_YIELD_PCT,
+        f"Premium > {MIN_PREMIUM}": premium > MIN_PREMIUM,
         f"{MIN_DTE} <= DTE <= {MAX_DTE}": MIN_DTE <= dte <= MAX_DTE,
         f"OTM >= {MIN_OTM_PCT}%": strike < price and otm_pct >= MIN_OTM_PCT,
         f"OI >= {MIN_OPEN_INTEREST}": open_interest >= MIN_OPEN_INTEREST,

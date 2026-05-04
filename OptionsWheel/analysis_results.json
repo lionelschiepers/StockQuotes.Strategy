@@ -1,6 +1,6 @@
 {
-  "timestamp": "2026-05-04T23:44:50.430794",
-  "total_tickers_analyzed": 1453,
+  "timestamp": "2026-05-05T00:10:51.603061",
+  "total_tickers_analyzed": 1454,
   "candidates_after_phase1": 567,
   "passed_all_criteria": 9,
   "near_misses": 182,
@@ -80,7 +80,7 @@
       "OTMPct": 22.99,
       "OpenInterest": 5652,
       "Volume": 135,
-      "Delta": -0.086,
+      "Delta": -0.085,
       "ImpliedVolatility": 1.193,
       "Score": 116.09
     },
@@ -457,7 +457,7 @@
       "OTMPct": 11.99,
       "OpenInterest": 4164,
       "Volume": 323,
-      "Delta": -0.233,
+      "Delta": -0.232,
       "ImpliedVolatility": 1.174,
       "Score": 125.05
     },
@@ -747,7 +747,7 @@
       "OTMPct": 11.02,
       "OpenInterest": 685,
       "Volume": 301,
-      "Delta": -0.081,
+      "Delta": -0.08,
       "ImpliedVolatility": 0.828,
       "Score": 122.0
     },
@@ -834,7 +834,7 @@
       "OTMPct": 9.37,
       "OpenInterest": 1230,
       "Volume": 756,
-      "Delta": -0.102,
+      "Delta": -0.101,
       "ImpliedVolatility": 0.77,
       "Score": 120.38
     },
@@ -1269,7 +1269,7 @@
       "OTMPct": 6.51,
       "OpenInterest": 433,
       "Volume": 55,
-      "Delta": -0.297,
+      "Delta": -0.296,
       "ImpliedVolatility": 0.558,
       "Score": 116.48
     },
@@ -1475,6 +1475,35 @@
       "Delta": -0.156,
       "ImpliedVolatility": 0.815,
       "Score": 114.5
+    },
+    {
+      "Symbol": "TTD",
+      "Name": "The Trade Desk, Inc.",
+      "Price": 24.1,
+      "EMA50": null,
+      "ADX": null,
+      "RSI": null,
+      "RVI": null,
+      "MACD": null,
+      "Signal": null,
+      "DiffPct": null,
+      "Status": "NEAR",
+      "Failed Criterion": "Spread <= 20.0%",
+      "Strike": 19.0,
+      "Expiration": "2026-05-15",
+      "DTE": 11,
+      "Premium": 0.34,
+      "Bid": 0.31,
+      "Ask": 0.38,
+      "SpreadPct": 20.29,
+      "MonthlyYieldPct": 4.95,
+      "AnnualizedYieldPct": 59.43,
+      "OTMPct": 21.16,
+      "OpenInterest": 4426,
+      "Volume": 50,
+      "Delta": -0.11,
+      "ImpliedVolatility": 1.227,
+      "Score": 114.42
     },
     {
       "Symbol": "ENPH",
@@ -1704,7 +1733,7 @@
       "OTMPct": 16.45,
       "OpenInterest": 500,
       "Volume": 115,
-      "Delta": -0.106,
+      "Delta": -0.105,
       "ImpliedVolatility": 0.885,
       "Score": 112.71
     },
@@ -2028,35 +2057,6 @@
       "Score": 111.15
     },
     {
-      "Symbol": "TTD",
-      "Name": "The Trade Desk, Inc.",
-      "Price": 24.1,
-      "EMA50": null,
-      "ADX": null,
-      "RSI": null,
-      "RVI": null,
-      "MACD": null,
-      "Signal": null,
-      "DiffPct": null,
-      "Status": "NEAR",
-      "Failed Criterion": "0.00 <= |Delta| <= 0.11",
-      "Strike": 22.5,
-      "Expiration": "2026-05-15",
-      "DTE": 11,
-      "Premium": 1.27,
-      "Bid": 1.17,
-      "Ask": 1.36,
-      "SpreadPct": 15.02,
-      "MonthlyYieldPct": 15.33,
-      "AnnualizedYieldPct": 184.0,
-      "OTMPct": 6.64,
-      "OpenInterest": 5056,
-      "Volume": 62,
-      "Delta": -0.33,
-      "ImpliedVolatility": 1.167,
-      "Score": 111.13
-    },
-    {
       "Symbol": "FISV",
       "Name": "Fiserv, Inc.",
       "Price": 62.81,
@@ -2168,7 +2168,7 @@
       "OTMPct": 10.84,
       "OpenInterest": 391,
       "Volume": 145,
-      "Delta": -0.185,
+      "Delta": -0.184,
       "ImpliedVolatility": 0.8,
       "Score": 109.73
     },
@@ -2429,7 +2429,7 @@
       "OTMPct": 5.08,
       "OpenInterest": 1065,
       "Volume": 66,
-      "Delta": -0.293,
+      "Delta": -0.292,
       "ImpliedVolatility": 0.612,
       "Score": 107.42
     },
@@ -2777,7 +2777,7 @@
       "OTMPct": 10.88,
       "OpenInterest": 148,
       "Volume": 13,
-      "Delta": -0.209,
+      "Delta": -0.208,
       "ImpliedVolatility": 0.709,
       "Score": 103.4
     },
@@ -2806,7 +2806,7 @@
       "OTMPct": 14.85,
       "OpenInterest": 424,
       "Volume": 57,
-      "Delta": -0.096,
+      "Delta": -0.095,
       "ImpliedVolatility": 0.748,
       "Score": 103.0
     },
@@ -3995,7 +3995,7 @@
       "OTMPct": 6.53,
       "OpenInterest": 736,
       "Volume": 174,
-      "Delta": -0.161,
+      "Delta": -0.16,
       "ImpliedVolatility": 0.408,
       "Score": 92.28
     },
@@ -4169,7 +4169,7 @@
       "OTMPct": 16.35,
       "OpenInterest": 1475,
       "Volume": 6,
-      "Delta": -0.08,
+      "Delta": -0.079,
       "ImpliedVolatility": 0.77,
       "Score": 89.01
     },
@@ -4227,7 +4227,7 @@
       "OTMPct": 6.43,
       "OpenInterest": 296,
       "Volume": 70,
-      "Delta": -0.301,
+      "Delta": -0.3,
       "ImpliedVolatility": 0.422,
       "Score": 88.78
     },
@@ -4256,7 +4256,7 @@
       "OTMPct": 6.24,
       "OpenInterest": 159,
       "Volume": 19,
-      "Delta": -0.255,
+      "Delta": -0.254,
       "ImpliedVolatility": 0.613,
       "Score": 88.76
     },
@@ -4372,7 +4372,7 @@
       "OTMPct": 21.58,
       "OpenInterest": 3794,
       "Volume": 10,
-      "Delta": -0.101,
+      "Delta": -0.1,
       "ImpliedVolatility": 1.196,
       "Score": 86.72
     },
@@ -4517,7 +4517,7 @@
       "OTMPct": 31.03,
       "OpenInterest": 2170,
       "Volume": 58,
-      "Delta": -0.031,
+      "Delta": -0.03,
       "ImpliedVolatility": 1.215,
       "Score": 85.83
     },
@@ -4720,7 +4720,7 @@
       "OTMPct": 23.4,
       "OpenInterest": 638,
       "Volume": 12,
-      "Delta": -0.049,
+      "Delta": -0.048,
       "ImpliedVolatility": 0.979,
       "Score": 82.77
     },
@@ -4778,7 +4778,7 @@
       "OTMPct": 21.58,
       "OpenInterest": 205,
       "Volume": 11,
-      "Delta": -0.017,
+      "Delta": -0.016,
       "ImpliedVolatility": 0.678,
       "Score": 82.23
     },
@@ -5039,7 +5039,7 @@
       "OTMPct": 7.17,
       "OpenInterest": 193,
       "Volume": 104,
-      "Delta": -0.235,
+      "Delta": -0.234,
       "ImpliedVolatility": 0.376,
       "Score": 80.13
     },
@@ -5474,7 +5474,7 @@
       "OTMPct": 8.03,
       "OpenInterest": 102,
       "Volume": 52,
-      "Delta": -0.104,
+      "Delta": -0.103,
       "ImpliedVolatility": 0.308,
       "Score": 62.81
     },
@@ -5532,7 +5532,7 @@
       "OTMPct": 9.38,
       "OpenInterest": 3292,
       "Volume": 14,
-      "Delta": -0.11,
+      "Delta": -0.109,
       "ImpliedVolatility": 0.236,
       "Score": 53.03
     },

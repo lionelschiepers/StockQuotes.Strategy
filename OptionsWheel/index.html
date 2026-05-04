@@ -40,20 +40,20 @@
             <table id="resultsTable" class="display w-full text-sm">
                 <thead>
                     <tr class="text-left bg-gray-50">
-                        <th class="px-4 py-3 font-semibold text-gray-700">Symbol</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Name</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Status</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Price</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Strike</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Exp</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">DTE</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Premium</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Mo Yield%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">OTM%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Delta</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Spread%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">OI</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Score</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Ticker symbol for the stock.">Symbol</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Company name.">Name</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Whether the candidate passed all screening criteria.">Status</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Current underlying stock price.">Price</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Put option strike price evaluated for the wheel.">Strike</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Option expiration date.">Exp</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Days to expiration.">DTE</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estimated premium collected per share.">Premium</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estimated monthly yield percentage from premium.">Mo Yield%</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Out-of-the-money percentage from current price to strike.">OTM%</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Option delta, indicating probability-like sensitivity to price moves.">Delta</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Bid-ask spread as a percentage of option price (lower is better).">Spread%</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Open interest (number of open option contracts).">OI</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Composite ranking score: yield + OTM distance + liquidity (OI/volume) + spread quality + DTE fit + IV. Higher is better.">Score</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody" class="divide-y divide-gray-200">

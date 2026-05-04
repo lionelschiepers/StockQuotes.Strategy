@@ -1,17 +1,55 @@
 import requests
+from requests.adapters import HTTPAdapter
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 import time
 import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import math
+import threading
+import random
+
+
+def convert_numpy_types(obj):
+    if isinstance(obj, dict):
+        return {k: convert_numpy_types(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    elif isinstance(obj, float) and (math.isnan(obj) or math.isinf(obj)):
+        return None
+    return obj
+
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, o):
+        if isinstance(o, float) and (math.isnan(o) or math.isinf(o)):
+            return None
+        if isinstance(o, np.floating):
+            return float(o) if not (math.isnan(o) or math.isinf(o)) else None
+        if isinstance(o, np.integer):
+            return int(o)
+        return super().default(o)
+
 
 # Configuration
 BATCH_SIZE = 50
 PRICE_LIMIT = 500
 HIST_DAYS = 120
+# BASE_URL = "http://localhost:7071/api/yahoo-finance"
+# HIST_URL = "http://localhost:7071/api/yahoo-finance-historical"
 BASE_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance"
 HIST_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical"
-SLEEP_TIME = 0.1
+SLEEP_TIME = 0.0
+MAX_WORKERS = 4
+REQUEST_TIMEOUT = 15
+MAX_RETRIES = 6
+
+_thread_local = threading.local()
+_rate_limit_lock = threading.Lock()
+_next_request_ts = 0.0
+_next_slot_ts = 0.0
+_min_request_interval = 0.35
 
 
 def get_tickers():
@@ -19,20 +57,99 @@ def get_tickers():
         return json.load(f)
 
 
-def safe_get(url):
+def get_session():
+    session = getattr(_thread_local, "session", None)
+    if session is None:
+        session = requests.Session()
+        adapter = HTTPAdapter(
+            pool_connections=MAX_WORKERS * 2, pool_maxsize=MAX_WORKERS * 4
+        )
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        _thread_local.session = session
+    return session
+
+
+def _wait_if_rate_limited():
+    global _next_request_ts
     while True:
+        with _rate_limit_lock:
+            wait_for = _next_request_ts - time.time()
+        if wait_for <= 0:
+            return
+        time.sleep(min(wait_for, 0.25))
+
+
+def _acquire_request_slot():
+    global _next_slot_ts
+    with _rate_limit_lock:
+        now = time.time()
+        slot_ts = max(now, _next_slot_ts)
+        _next_slot_ts = slot_ts + _min_request_interval
+    wait_for = slot_ts - time.time()
+    if wait_for > 0:
+        time.sleep(wait_for)
+
+
+def _on_success():
+    global _min_request_interval
+    with _rate_limit_lock:
+        _min_request_interval = max(0.12, _min_request_interval * 0.98)
+
+
+def _on_rate_limited(retry_after):
+    global _min_request_interval
+    with _rate_limit_lock:
+        grown_interval = _min_request_interval * 1.4
+        floor_from_retry = max(0.25, retry_after)
+        _min_request_interval = min(5.0, max(grown_interval, floor_from_retry))
+
+
+def _set_global_cooldown(seconds):
+    global _next_request_ts, _next_slot_ts, _min_request_interval
+    seconds = max(0.0, float(seconds))
+    with _rate_limit_lock:
+        # Spread requests after cooldown to avoid herd retries.
+        _min_request_interval = max(_min_request_interval, min(5.0, seconds))
+        _next_request_ts = max(_next_request_ts, time.time() + seconds)
+        _next_slot_ts = max(_next_slot_ts, _next_request_ts)
+
+
+def safe_get(url):
+    for attempt in range(MAX_RETRIES):
+        _wait_if_rate_limited()
+        _acquire_request_slot()
         try:
-            response = requests.get(url)
+            response = get_session().get(url, timeout=REQUEST_TIMEOUT)
             if response.status_code == 429:
-                retry_after = int(response.headers.get("Retry-After", 5))
-                print(f"Rate limited. Waiting {retry_after} seconds...")
-                time.sleep(retry_after)
+                retry_after_raw = response.headers.get("Retry-After", "1")
+                try:
+                    retry_after = float(retry_after_raw)
+                except ValueError:
+                    retry_after = 1.0
+                retry_after += random.uniform(0.05, 0.25)
+                _on_rate_limited(retry_after)
+                print(f"Rate limited. Waiting {retry_after:.2f} seconds...")
+                _set_global_cooldown(retry_after)
                 continue
+
+            if response.status_code >= 500:
+                backoff = min(0.25 * (2**attempt), 5.0)
+                time.sleep(backoff)
+                continue
+
             response.raise_for_status()
+            _on_success()
             return response.json()
-        except Exception as e:
-            print(f"Error fetching {url}: {e}")
-            return None
+        except requests.RequestException as e:
+            if attempt == MAX_RETRIES - 1:
+                print(f"Error fetching {url}: {e}")
+                return None
+            backoff = min(0.25 * (2**attempt), 5.0)
+            time.sleep(backoff)
+
+    print(f"Error fetching {url}: max retries exceeded")
+    return None
 
 
 def batch_price_filter(tickers):
@@ -40,12 +157,18 @@ def batch_price_filter(tickers):
     for i in range(0, len(tickers), BATCH_SIZE):
         batch = tickers[i : i + BATCH_SIZE]
         symbols = ",".join(batch)
-        url = f"{BASE_URL}?symbols={symbols}&fields=symbol,shortName,regularMarketPrice"
+        url = f"{BASE_URL}?symbols={symbols}&fields=symbol,shortName,regularMarketPrice,trailingPE"
         data = safe_get(url)
         if data:
             for item in data:
                 price = item.get("regularMarketPrice")
-                if price is not None and price < PRICE_LIMIT:
+                pe = item.get("trailingPE")
+                if (
+                    price is not None
+                    and price < PRICE_LIMIT
+                    and pe is not None
+                    and pe <= 100
+                ):
                     candidates.append(
                         {
                             "symbol": item["symbol"],
@@ -53,7 +176,8 @@ def batch_price_filter(tickers):
                             "name": item.get("shortName", ""),
                         }
                     )
-        time.sleep(SLEEP_TIME)
+        if SLEEP_TIME > 0:
+            time.sleep(SLEEP_TIME)
     return candidates
 
 
@@ -139,6 +263,70 @@ def format_eta(seconds):
     return f"{mins:d}:{secs:02d}"
 
 
+def analyze_single_candidate(c, start_str, end_str):
+    symbol = c["symbol"]
+    url = f"{HIST_URL}?ticker={symbol}&from={start_str}&to={end_str}"
+    data = safe_get(url)
+    if not data:
+        return None
+
+    quotes = data.get("quotes", [])
+    if len(quotes) < 60:
+        return None
+
+    df = pd.DataFrame(quotes)
+    if df.empty:
+        return None
+
+    df = df.dropna(subset=["close"])
+    if len(df) < 60:
+        return None
+
+    if isinstance(df["date"].iloc[0], str):
+        df["date"] = pd.to_datetime(df["date"])
+    else:
+        df["date"] = pd.to_datetime(df["date"], unit="s")
+    df = df.sort_values("date")
+
+    close = df["close"]
+    price = close.iloc[-1]
+
+    ema50 = calculate_ema(close, 50).iloc[-1]
+    rsi_series = calculate_rsi(close, 14)
+    rsi_today = rsi_series.iloc[-1]
+    rsi_3d_ago = rsi_series.iloc[-4] if len(rsi_series) >= 4 else None
+
+    adx = calculate_adx(df, 14).iloc[-1]
+    macd, macd_signal = calculate_macd(close)
+    rvi = calculate_rvi(close, 10, 14).iloc[-1]
+
+    conds = {
+        "Price < EMA50": price < ema50,
+        "ADX < 30": adx < 30,
+        "15 <= RSI <= 35": 15 <= rsi_today <= 35,
+        "RSI Rising (3d)": rsi_3d_ago is not None and rsi_today > rsi_3d_ago,
+    }
+
+    failed = [name for name, val in conds.items() if not val]
+
+    res_data = {
+        "Symbol": symbol,
+        "Name": c["name"],
+        "Price": round(price, 2),
+        "EMA50": round(ema50, 2),
+        "ADX": round(adx, 2),
+        "RSI": round(rsi_today, 2),
+        "RVI": round(rvi, 2),
+        "MACD": round(macd.iloc[-1], 2),
+        "Signal": round(macd_signal.iloc[-1], 2),
+        "DiffPct": round(((price - ema50) / ema50) * 100, 2),
+        "Status": "PASS" if len(failed) == 0 else "NEAR",
+        "Failed Criterion": failed[0] if len(failed) == 1 else "",
+    }
+
+    return res_data, failed
+
+
 def deep_analysis(candidates):
     results = []
     near_misses = []
@@ -151,79 +339,36 @@ def deep_analysis(candidates):
     total = len(candidates)
     print(f"Analyzing {total} candidates from {start_str} to {end_str}")
     analysis_start = time.time()
-    for idx, c in enumerate(candidates, 1):
-        symbol = c["symbol"]
-        elapsed = time.time() - analysis_start
-        if idx > 1:
-            avg_time = elapsed / (idx - 1)
-            eta_seconds = avg_time * (total - idx + 1)
-            eta_str = format_eta(eta_seconds)
-        else:
-            eta_str = "--:--"
-        msg = f"[{idx}/{total}] Analyzing {symbol:<10} ETA: {eta_str}"
-        print(f"{msg:<60}", end="\r", flush=True)
-        url = f"{HIST_URL}?ticker={symbol}&from={start_str}&to={end_str}"
-        data = safe_get(url)
-        if not data:
-            continue
 
-        quotes = data.get("quotes", [])
-        if len(quotes) < 60:
-            continue
-
-        df = pd.DataFrame(quotes)
-        if df.empty:
-            continue
-
-        if isinstance(df["date"].iloc[0], str):
-            df["date"] = pd.to_datetime(df["date"])
-        else:
-            df["date"] = pd.to_datetime(df["date"], unit="s")
-        df = df.sort_values("date")
-
-        close = df["close"]
-        price = close.iloc[-1]
-
-        ema50 = calculate_ema(close, 50).iloc[-1]
-        rsi_series = calculate_rsi(close, 14)
-        rsi_today = rsi_series.iloc[-1]
-        rsi_3d_ago = rsi_series.iloc[-4] if len(rsi_series) >= 4 else None
-
-        adx = calculate_adx(df, 14).iloc[-1]
-        macd, macd_signal = calculate_macd(close)
-        rvi = calculate_rvi(close, 10, 14).iloc[-1]
-
-        # Criteria definitions
-        conds = {
-            "Price < EMA50": price < ema50,
-            "ADX < 30": adx < 30,
-            "15 <= RSI <= 35": 15 <= rsi_today <= 35,
-            "RSI Rising (3d)": rsi_3d_ago is not None and rsi_today > rsi_3d_ago,
+    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+        futures = {
+            executor.submit(analyze_single_candidate, c, start_str, end_str): idx
+            for idx, c in enumerate(candidates, 1)
         }
 
-        failed = [name for name, val in conds.items() if not val]
+        for future in as_completed(futures):
+            idx = futures[future]
+            elapsed = time.time() - analysis_start
+            if idx > 1:
+                avg_time = elapsed / (idx - 1)
+                eta_seconds = avg_time * (total - idx + 1)
+                eta_str = format_eta(eta_seconds)
+            else:
+                eta_str = "--:--"
+            symbol = candidates[idx - 1]["symbol"]
+            msg = f"[{idx}/{total}] Analyzing {symbol:<10} ETA: {eta_str}"
+            print(f"{msg:<60}", end="\r", flush=True)
 
-        res_data = {
-            "Symbol": symbol,
-            "Name": c["name"],
-            "Price": round(price, 2),
-            "EMA50": round(ema50, 2),
-            "ADX": round(adx, 2),
-            "RSI": round(rsi_today, 2),
-            "RVI": round(rvi, 2),
-            "MACD": round(macd.iloc[-1], 2),
-            "Signal": round(macd_signal.iloc[-1], 2),
-            "DiffPct": round(((price - ema50) / ema50) * 100, 2),
-            "Status": "PASS" if len(failed) == 0 else "NEAR",
-            "Failed Criterion": failed[0] if len(failed) == 1 else "",
-        }
-
-        if len(failed) == 0:
-            results.append(res_data)
-        elif len(failed) == 1:
-            near_misses.append(res_data)
-
-        time.sleep(SLEEP_TIME)
+            try:
+                result = future.result()
+                if result:
+                    res_data, failed = result
+                    if len(failed) == 0:
+                        results.append(res_data)
+                    elif len(failed) == 1:
+                        near_misses.append(res_data)
+            except Exception as e:
+                print(f"\nError analyzing {symbol}: {e}")
 
     return results, near_misses
 
@@ -273,9 +418,10 @@ def main():
         "near_misses": len(near_misses),
         "results": combined_results,
     }
+    output = convert_numpy_types(output)
 
     with open("analysis_results.json", "w") as f:
-        json.dump(output, f, indent=2)
+        json.dump(output, f, indent=2, cls=NumpyEncoder)
     print(f"\nResults saved to analysis_results.json")
 
 

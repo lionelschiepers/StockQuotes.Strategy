@@ -105,17 +105,17 @@
                                     ${r.Status}
                                 </span>
                             </td>
-                            <td class="px-4 py-4 font-mono text-gray-700 font-medium">${r.Price.toFixed(2)}</td>
-                            <td class="px-4 py-4 font-mono text-gray-500">${r.EMA50.toFixed(2)}</td>
+                            <td class="px-4 py-4 font-mono text-gray-700 font-medium">${r.Price != null ? r.Price.toFixed(2) : 'N/A'}</td>
+                            <td class="px-4 py-4 font-mono text-gray-500">${r.EMA50 != null ? r.EMA50.toFixed(2) : 'N/A'}</td>
                             <td class="px-4 py-4 font-mono font-bold ${r.DiffPct < 0 ? 'text-red-500' : 'text-emerald-500'}">
-                                ${r.DiffPct > 0 ? '+' : ''}${r.DiffPct.toFixed(2)}%
+                                ${r.DiffPct != null ? (r.DiffPct > 0 ? '+' : '') + r.DiffPct.toFixed(2) + '%' : 'N/A'}
                             </td>
-                            <td class="px-4 py-4 text-gray-600">${r.ADX.toFixed(2)}</td>
-                            <td class="px-4 py-4 text-gray-600">${r.RSI.toFixed(2)}</td>
-                            <td class="px-4 py-4 text-gray-600">${r.RVI.toFixed(2)}</td>
-                            <td class="px-4 py-4 text-gray-600">${r.MACD.toFixed(2)}</td>
+                            <td class="px-4 py-4 text-gray-600">${r.ADX != null ? r.ADX.toFixed(2) : 'N/A'}</td>
+                            <td class="px-4 py-4 text-gray-600">${r.RSI != null ? r.RSI.toFixed(2) : 'N/A'}</td>
+                            <td class="px-4 py-4 text-gray-600">${r.RVI != null ? r.RVI.toFixed(2) : 'N/A'}</td>
+                            <td class="px-4 py-4 text-gray-600">${r.MACD != null ? r.MACD.toFixed(2) : 'N/A'}</td>
                             <td class="px-4 py-4 text-xs text-gray-400 italic">${r['Failed Criterion'] || '<span class="text-gray-200">—</span>'}</td>
-                            <td class="px-4 py-4 put-option-cell" data-symbol="${r.Symbol}" data-price="${r.Price}">
+                            <td class="px-4 py-4 put-option-cell" data-symbol="${r.Symbol}" data-price="${r.Price != null ? r.Price : ''}">
                                 <span class="text-gray-400">Loading...</span>
                             </td>
                         </tr>
@@ -228,8 +228,9 @@
         }
 
         async function checkPutOptions(results, maxConcurrent = 2) {
+            /* const optionsApiUrl = 'http://localhost:7071/api/yahoo-finance-stock-options?ticker={TICKER}&filter=puts&limit=10&expirationDatesCount=2';
+            */
             const optionsApiUrl = 'https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options?ticker={TICKER}&filter=puts&limit=10&expirationDatesCount=2';
-            
             results.forEach(r => {
                 const cell = document.querySelector(`.put-option-cell[data-symbol="${r.Symbol}"]`);
                 if (cell) cell.innerHTML = '<span class="text-gray-400">Loading...</span>';

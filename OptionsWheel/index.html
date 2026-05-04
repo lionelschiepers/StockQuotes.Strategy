@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stock Analysis Dashboard</title>
+    <title>Options Wheel Candidate Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -23,7 +23,7 @@
 <body class="bg-gray-50 p-4 md:p-8">
     <div class="max-w-7xl mx-auto">
         <header class="mb-8">
-            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">Stock Analysis Dashboard</h1>
+            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">Options Wheel Candidate Dashboard</h1>
             <p id="last-updated" class="text-gray-500 mt-2">Loading data...</p>
         </header>
         
@@ -44,14 +44,16 @@
                         <th class="px-4 py-3 font-semibold text-gray-700">Name</th>
                         <th class="px-4 py-3 font-semibold text-gray-700">Status</th>
                         <th class="px-4 py-3 font-semibold text-gray-700">Price</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">EMA50</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Diff%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">ADX</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">RSI</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">RVI</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">MACD</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Failed Criterion</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700">Put Option</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">Strike</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">Exp</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">DTE</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">Premium</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">Mo Yield%</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">OTM%</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">Delta</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">Spread%</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">OI</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700">Score</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody" class="divide-y divide-gray-200">
@@ -67,12 +69,22 @@
 
     <script>
         $(document).ready(function() {
-            fetch('analysis_results.json')
-                .then(response => {
-                    if (!response.ok) throw new Error('Network response was not ok');
-                    return response.json();
+            Promise.all([
+                fetch('analysis_results.json'),
+                fetch('screening_config.json')
+            ])
+                .then(([resultsResponse, configResponse]) => {
+                    if (!resultsResponse.ok) throw new Error('Could not load analysis_results.json');
+                    if (!configResponse.ok) throw new Error('Could not load screening_config.json');
+                    return Promise.all([resultsResponse.json(), configResponse.json()]);
                 })
-                .then(data => {
+                .then(([data, config]) => {
+                    const targetMonthlyYield = Number(config.TARGET_MONTHLY_YIELD_PCT ?? 1.0);
+                    const minAbsDelta = Number(config.MIN_ABS_DELTA ?? 0.0);
+                    const maxAbsDelta = Number(config.MAX_ABS_DELTA ?? 0.3);
+                    const minOtmPct = Number(config.MIN_OTM_PCT ?? 0.0);
+                    const maxSpreadPct = Number(config.MAX_SPREAD_PCT ?? 20.0);
+
                     // Update Last Updated
                     const date = new Date(data.timestamp);
                     document.getElementById('last-updated').innerText = `Last analyzed: ${date.toLocaleString()}`;
@@ -96,39 +108,81 @@
 
                     // Populate Table
                     const tableBody = document.getElementById('tableBody');
-                    tableBody.innerHTML = data.results.map(r => `
-                        <tr class="hover:bg-gray-50 transition-colors">
-                            <td class="px-4 py-4 font-bold text-blue-600"><a href="https://finance.yahoo.com/quote/${r.Symbol}/" target="_blank" class="hover:underline">${r.Symbol}</a></td>
-                            <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${r.Name}">${r.Name}</td>
-                            <td class="px-4 py-4">
-                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${r.Status === 'PASS' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}">
-                                    ${r.Status}
-                                </span>
-                            </td>
-                            <td class="px-4 py-4 font-mono text-gray-700 font-medium">${r.Price != null ? r.Price.toFixed(2) : 'N/A'}</td>
-                            <td class="px-4 py-4 font-mono text-gray-500">${r.EMA50 != null ? r.EMA50.toFixed(2) : 'N/A'}</td>
-                            <td class="px-4 py-4 font-mono font-bold ${r.DiffPct < 0 ? 'text-red-500' : 'text-emerald-500'}">
-                                ${r.DiffPct != null ? (r.DiffPct > 0 ? '+' : '') + r.DiffPct.toFixed(2) + '%' : 'N/A'}
-                            </td>
-                            <td class="px-4 py-4 text-gray-600">${r.ADX != null ? r.ADX.toFixed(2) : 'N/A'}</td>
-                            <td class="px-4 py-4 text-gray-600">${r.RSI != null ? r.RSI.toFixed(2) : 'N/A'}</td>
-                            <td class="px-4 py-4 text-gray-600">${r.RVI != null ? r.RVI.toFixed(2) : 'N/A'}</td>
-                            <td class="px-4 py-4 text-gray-600">${r.MACD != null ? r.MACD.toFixed(2) : 'N/A'}</td>
-                            <td class="px-4 py-4 text-xs text-gray-400 italic">${r['Failed Criterion'] || '<span class="text-gray-200">—</span>'}</td>
-                            <td class="px-4 py-4 put-option-cell" data-symbol="${r.Symbol}" data-price="${r.Price != null ? r.Price : ''}">
-                                <span class="text-gray-400">Loading...</span>
-                            </td>
-                        </tr>
-                    `).join('');
+                    tableBody.innerHTML = data.results.map(r => {
+                        const monthlyYield = r.MonthlyYieldPct;
+                        const spreadPct = r.SpreadPct;
+                        const score = r.Score;
+                        const absDelta = r.Delta != null ? Math.abs(r.Delta) : null;
+
+                        const yieldClass = monthlyYield == null
+                            ? 'text-gray-500'
+                            : monthlyYield >= targetMonthlyYield
+                                ? 'text-emerald-600'
+                                : monthlyYield >= (targetMonthlyYield * 0.8)
+                                    ? 'text-amber-600'
+                                    : 'text-red-600';
+
+                        const spreadClass = spreadPct == null
+                            ? 'text-gray-500'
+                            : spreadPct <= maxSpreadPct
+                                ? 'text-emerald-600'
+                                : spreadPct <= (maxSpreadPct * 1.25)
+                                    ? 'text-amber-600'
+                                    : 'text-red-600';
+
+                        const otmClass = r.OTMPct == null
+                            ? 'text-gray-500'
+                            : r.OTMPct >= minOtmPct
+                                ? 'text-emerald-600'
+                                : r.OTMPct >= (minOtmPct * 0.8)
+                                    ? 'text-amber-600'
+                                    : 'text-red-600';
+
+                        const deltaClass = absDelta == null
+                            ? 'text-gray-500'
+                            : (absDelta >= minAbsDelta && absDelta <= maxAbsDelta)
+                                ? 'text-emerald-600'
+                                : (absDelta >= (minAbsDelta * 0.8) && absDelta <= (maxAbsDelta * 1.2))
+                                    ? 'text-amber-600'
+                                    : 'text-red-600';
+
+                        const scoreClass = score == null
+                            ? 'text-gray-500'
+                            : score >= 75
+                                ? 'text-emerald-700'
+                                : score >= 55
+                                    ? 'text-amber-700'
+                                    : 'text-red-700';
+
+                        return `
+                            <tr class="hover:bg-gray-50 transition-colors">
+                                <td class="px-4 py-4 font-bold text-blue-600"><a href="https://finance.yahoo.com/quote/${r.Symbol}/" target="_blank" class="hover:underline">${r.Symbol}</a></td>
+                                <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${r.Name}">${r.Name}</td>
+                                <td class="px-4 py-4">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${r.Status === 'PASS' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}">
+                                        ${r.Status}
+                                    </span>
+                                </td>
+                                <td class="px-4 py-4 font-mono text-gray-700 font-medium">${r.Price != null ? r.Price.toFixed(2) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-gray-700">${r.Strike != null ? r.Strike.toFixed(2) : 'N/A'}</td>
+                                <td class="px-4 py-4 text-gray-600">${r.Expiration || 'N/A'}</td>
+                                <td class="px-4 py-4 text-gray-600">${r.DTE != null ? r.DTE : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-gray-700">${r.Premium != null ? r.Premium.toFixed(2) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono font-bold ${yieldClass}">${r.MonthlyYieldPct != null ? r.MonthlyYieldPct.toFixed(2) + '%' : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono ${otmClass}">${r.OTMPct != null ? r.OTMPct.toFixed(2) + '%' : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono ${deltaClass}">${r.Delta != null ? r.Delta.toFixed(3) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono ${spreadClass}">${r.SpreadPct != null ? r.SpreadPct.toFixed(2) + '%' : 'N/A'}</td>
+                                <td class="px-4 py-4 text-gray-600">${r.OpenInterest != null ? r.OpenInterest : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono font-semibold ${scoreClass}">${r.Score != null ? r.Score.toFixed(2) : 'N/A'}</td>
+                            </tr>
+                        `;
+                    }).join('');
 
                     // Initialize DataTable
                     const table = $('#resultsTable').DataTable({
                         pageLength: 25,
-                        order: [[2, 'asc'], [5, 'asc']], // Default sort: Status then DiffPct
+                        order: [[2, 'asc'], [13, 'desc'], [8, 'desc']],
                         responsive: true,
-                        columnDefs: [
-                            { targets: 11, orderable: false }
-                        ],
                         language: {
                             searchPlaceholder: "Search tickers...",
                             search: ""
@@ -138,112 +192,17 @@
                     // Style the search box
                     $('.dataTables_filter input').addClass('bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4');
 
-                    // Fetch put options on draw (sort, filter, page change)
-                    table.on('draw', function() {
-                        const visibleCells = document.querySelectorAll('.put-option-cell');
-                        const visibleRows = [];
-                        visibleCells.forEach(cell => {
-                            const symbol = cell.dataset.symbol;
-                            const row = data.results.find(r => r.Symbol === symbol);
-                            if (row) visibleRows.push(row);
-                        });
-                        checkPutOptions(visibleRows);
-                    });
-
-                    // Initial fetch
-                    checkPutOptions(data.results);
                 })
                 .catch(error => {
                     console.error('Error loading JSON:', error);
                     document.getElementById('summary').innerHTML = `
                         <div class="col-span-full bg-red-50 p-4 border border-red-200 rounded-lg text-red-700">
-                            <strong>Error:</strong> Could not load analysis results. 
-                            <p class="text-sm mt-1">Please ensure <code>analysis_results.json</code> exists and you are viewing this page through a web server (e.g., <code>python -m http.server</code>).</p>
+                            <strong>Error:</strong> Could not load dashboard data.
+                            <p class="text-sm mt-1">Please ensure <code>analysis_results.json</code> and <code>screening_config.json</code> exist and you are viewing this page through a web server (e.g., <code>python -m http.server</code>).</p>
                         </div>
                     `;
                 });
-                });
-
-        async function fetchWithRetry(url, maxRetries = 3, baseDelay = 1000) {
-            for (let attempt = 0; attempt < maxRetries; attempt++) {
-                const response = await fetch(url);
-                if (response.ok) return response;
-                if (response.status === 429) {
-                    const retryAfter = response.headers.get('Retry-After');
-                    let delay;
-                    if (retryAfter) {
-                        const seconds = parseInt(retryAfter, 10);
-                        delay = isNaN(seconds) ? baseDelay * Math.pow(2, attempt) : seconds * 1000;
-                    } else {
-                        delay = baseDelay * Math.pow(2, attempt);
-                    }
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                    continue;
-                }
-                throw new Error(`HTTP ${response.status}`);
-            }
-            throw new Error('Max retries exceeded');
-        }
-
-        async function checkSinglePutOption(r, optionsApiUrl) {
-            const cell = document.querySelector(`.put-option-cell[data-symbol="${r.Symbol}"]`);
-            if (!cell) return;
-            
-            try {
-                const response = await fetchWithRetry(optionsApiUrl.replace('{TICKER}', r.Symbol));
-                const data = await response.json();
-                
-                const price = r.Price;
-                const targetStrike = price * 0.93;
-                
-                const options = data.options || [];
-
-                const puts1 = Array.isArray(options) && options.length > 0 ? options[0].puts : undefined;
-                const validPut1 = puts1 ? puts1.find(opt => opt.strike <= targetStrike) : undefined;
-                
-                const puts2 = Array.isArray(options) && options.length > 1 ? options[1].puts : undefined;
-                const validPut2 = puts2 ? puts2.find(opt => opt.strike <= targetStrike) : undefined;
-                
-                let html = '';
-                if (validPut1) {
-                    const returnPct1 = (validPut1.lastPrice / price) * 100;
-                    html += `<span class="font-mono text-gray-700">${returnPct1.toFixed(2)}%</span>`;
-                } else {
-                    html += '<span class="text-gray-400">—</span>';
-                }
-                
-                html += ' / ';
-                
-                if (validPut2) {
-                    const returnPct2 = (validPut2.lastPrice / price) * 100;
-                    html += `<span class="font-mono text-gray-700">${returnPct2.toFixed(2)}%</span>`;
-                } else {
-                    html += '<span class="text-gray-400">—</span>';
-                }
-                
-                cell.innerHTML = html;
-            } catch (e) {
-                cell.innerHTML = '<span class="text-gray-400">Error</span>';
-            }
-        }
-
-        async function checkPutOptions(results, maxConcurrent = 2) {
-            /* const optionsApiUrl = 'http://localhost:7071/api/yahoo-finance-stock-options?ticker={TICKER}&filter=puts&limit=10&expirationDatesCount=2';
-            */
-            const optionsApiUrl = 'https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options?ticker={TICKER}&filter=puts&limit=10&expirationDatesCount=2';
-            results.forEach(r => {
-                const cell = document.querySelector(`.put-option-cell[data-symbol="${r.Symbol}"]`);
-                if (cell) cell.innerHTML = '<span class="text-gray-400">Loading...</span>';
-            });
-            
-            for (let i = 0; i < results.length; i += maxConcurrent) {
-                const batch = results.slice(i, i + maxConcurrent);
-                await Promise.all(batch.map(r => checkSinglePutOption(r, optionsApiUrl)));
-                if (i + maxConcurrent < results.length) {
-                    await new Promise(resolve => setTimeout(resolve, 1));
-                }
-            }
-        }
+        });
     </script>
 </body>
 </html>

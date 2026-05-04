@@ -76,5 +76,18 @@ Use Wilder's smoothing method (not simple SMA)
 - **Insufficient History:** If a ticker has < 50 days of data, it cannot accurately calculate EMA50; exclude it.
 - **API Timeout:** If a sequential call fails, retry once before skipping the ticker.
 
+## 6. Runtime Configuration
+- `analyze_stocks.py` loads screener thresholds from `screening_config.json` by default.
+- You can override any value using environment variables prefixed with `OW_`.
+  - Example: `OW_TARGET_MONTHLY_YIELD_PCT=1.2`
+  - Example: `OW_MIN_DTE=25`
+  - Example: `OW_MAX_SPREAD_PCT=12`
+- To use another config file path, set `OPTIONS_SCREEN_CONFIG`.
+  - Example: `OPTIONS_SCREEN_CONFIG=custom_screening_config.json`
+- Startup now validates configuration ranges and exits with a clear error if values are invalid (for example `MIN_DTE > MAX_DTE` or delta bounds outside `[0, 1]`).
+- For unstable option-chain APIs, tune:
+  - `OPTIONS_REQUEST_TIMEOUT` (seconds per options request)
+  - `OPTIONS_MAX_RETRIES` (max retry attempts for options requests)
+
 ## 5. Ticker List
 - @tickers.json contains an array of tickers.

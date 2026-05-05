@@ -17,7 +17,15 @@
         table.dataTable thead th {
             border-bottom: 2px solid #e5e7eb !important;
         }
-        table.dataTable border-collapse: collapse;
+        table.dataTable {
+            border-collapse: collapse;
+        }
+        #resultsTable thead th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: #f9fafb;
+        }
     </style>
 </head>
 <body class="bg-gray-50 p-4 md:p-8">
@@ -36,30 +44,60 @@
         </div>
 
         <!-- Main Table -->
-        <div class="bg-white p-6 rounded-xl shadow-md border border-gray-100 overflow-hidden">
+        <div class="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+            <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div id="thresholdLegend" class="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
+                    <span class="font-semibold text-gray-700">Legend:</span>
+                    <span><span class="text-emerald-700">Green</span> = meets target</span>
+                    <span><span class="text-amber-700">Amber</span> = near target</span>
+                    <span><span class="text-red-700">Red</span> = below target</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                    <label class="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700">
+                        <input id="filterPassOnly" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                        PASS only
+                    </label>
+                    <label class="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700">
+                        Min Score
+                        <input id="filterMinScore" type="number" min="0" max="100" step="1" class="w-20 rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </label>
+                    <label class="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700">
+                        Min OI
+                        <input id="filterMinOi" type="number" min="0" step="1" class="w-24 rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    </label>
+                    <button id="resetFilters" type="button" class="rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-700 hover:bg-gray-50">
+                        Reset filters
+                    </button>
+                    <span id="activeFilterCount" class="text-gray-500 px-2">No filters</span>
+                </div>
+            </div>
+            <div class="overflow-x-auto">
             <table id="resultsTable" class="display w-full text-sm">
                 <thead>
                     <tr class="text-left bg-gray-50">
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Ticker symbol for the stock.">Symbol</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Company name.">Name</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Whether the candidate passed all screening criteria.">Status</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Current underlying stock price.">Price</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Put option strike price evaluated for the wheel.">Strike</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Current underlying stock price.">Price</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Put option strike price evaluated for the wheel.">Strike</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Option expiration date.">Exp</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Days to expiration.">DTE</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estimated premium collected per share.">Premium</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Estimated monthly yield percentage from premium.">Mo Yield%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Out-of-the-money percentage from current price to strike.">OTM%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Option delta, indicating probability-like sensitivity to price moves.">Delta</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Bid-ask spread as a percentage of option price (lower is better).">Spread%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Open interest (number of open option contracts).">OI</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Composite ranking score: yield + OTM distance + liquidity (OI/volume) + spread quality + DTE fit + IV. Higher is better.">Score</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Next known earnings date for the underlying.">Next Earn</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-center" title="Whether earnings occurs on/before option expiration.">Earn<=Exp</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Days to expiration.">DTE</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Estimated premium collected per share.">Premium</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Estimated monthly yield percentage from premium.">Mo Yield%</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Out-of-the-money percentage from current price to strike.">OTM%</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Option delta, indicating probability-like sensitivity to price moves.">Delta</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Bid-ask spread as a percentage of option price (lower is better).">Spread%</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Open interest (number of open option contracts).">OI</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Composite ranking score: yield + OTM distance + liquidity (OI/volume) + spread quality + DTE fit + IV. Higher is better.">Score</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody" class="divide-y divide-gray-200">
                     <!-- Data will be injected here -->
                 </tbody>
             </table>
+            </div>
         </div>
         
         <footer class="mt-8 text-center text-gray-400 text-xs">
@@ -79,15 +117,42 @@
                     return Promise.all([resultsResponse.json(), configResponse.json()]);
                 })
                 .then(([data, config]) => {
+                    const escapeHtml = value => String(value).replace(/[&<>'"]/g, char => ({
+                        '&': '&amp;',
+                        '<': '&lt;',
+                        '>': '&gt;',
+                        "'": '&#39;',
+                        '"': '&quot;'
+                    }[char]));
+
+                    const formatMoney = value => value != null ? Number(value).toFixed(2) : 'N/A';
+                    const formatPct = (value, digits = 2) => value != null ? `${Number(value).toFixed(digits)}%` : 'N/A';
+
                     const targetMonthlyYield = Number(config.TARGET_MONTHLY_YIELD_PCT ?? 1.0);
                     const minAbsDelta = Number(config.MIN_ABS_DELTA ?? 0.0);
                     const maxAbsDelta = Number(config.MAX_ABS_DELTA ?? 0.3);
+                    const minDte = Number(config.MIN_DTE ?? 7);
+                    const maxDte = Number(config.MAX_DTE ?? 60);
                     const minOtmPct = Number(config.MIN_OTM_PCT ?? 0.0);
                     const maxSpreadPct = Number(config.MAX_SPREAD_PCT ?? 20.0);
+                    const scoreHighThreshold = 75;
+                    const scoreMidThreshold = 55;
 
                     // Update Last Updated
                     const date = new Date(data.timestamp);
-                    document.getElementById('last-updated').innerText = `Last analyzed: ${date.toLocaleString()}`;
+                    document.getElementById('last-updated').innerText = Number.isNaN(date.getTime())
+                        ? 'Last analyzed: timestamp unavailable'
+                        : `Last analyzed: ${date.toLocaleString()}`;
+
+                    // Update legend with active thresholds
+                    document.getElementById('thresholdLegend').innerHTML = `
+                        <span class="font-semibold text-gray-700">Legend:</span>
+                        <span><span class="text-emerald-700">Green</span> = meets target</span>
+                        <span><span class="text-amber-700">Amber</span> = near target</span>
+                        <span><span class="text-red-700">Red</span> = below target</span>
+                        <span class="text-gray-500">Yield target: ${targetMonthlyYield.toFixed(2)}%</span>
+                        <span class="text-gray-500">Max spread: ${maxSpreadPct.toFixed(2)}%</span>
+                    `;
 
                     // Update Summary
                     const summaryDiv = document.getElementById('summary');
@@ -97,22 +162,37 @@
                         { label: 'Passed All', value: data.passed_all_criteria, color: 'green' },
                         { label: 'Near Misses', value: data.near_misses, color: 'amber' }
                     ];
+                    const cardColorClass = {
+                        blue: 'bg-blue-500',
+                        indigo: 'bg-indigo-500',
+                        green: 'bg-green-500',
+                        amber: 'bg-amber-500'
+                    };
                     
                     summaryDiv.innerHTML = cards.map(card => `
                         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
                             <p class="text-gray-400 text-xs font-bold uppercase tracking-wider">${card.label}</p>
                             <p class="text-3xl font-black text-gray-800 mt-1">${card.value.toLocaleString()}</p>
-                            <div class="h-1 w-12 bg-${card.color}-500 mt-3 rounded-full"></div>
+                            <div class="h-1 w-12 ${cardColorClass[card.color] || 'bg-gray-400'} mt-3 rounded-full"></div>
                         </div>
                     `).join('');
 
                     // Populate Table
                     const tableBody = document.getElementById('tableBody');
                     tableBody.innerHTML = data.results.map(r => {
+                        const symbolRaw = r.Symbol != null ? String(r.Symbol) : '';
+                        const symbolText = escapeHtml(symbolRaw || 'N/A');
+                        const symbolHref = `https://finance.yahoo.com/quote/${encodeURIComponent(symbolRaw)}/`;
+                        const nameText = escapeHtml(r.Name != null ? String(r.Name) : 'N/A');
+                        const expirationText = escapeHtml(r.Expiration != null ? String(r.Expiration) : 'N/A');
+                        const nextEarningsText = escapeHtml(r.NextEarnings != null ? String(r.NextEarnings) : 'N/A');
+
                         const monthlyYield = r.MonthlyYieldPct;
                         const spreadPct = r.SpreadPct;
                         const score = r.Score;
                         const absDelta = r.Delta != null ? Math.abs(r.Delta) : null;
+                        const dte = r.DTE != null ? Number(r.DTE) : null;
+                        const earningsBeforeExpiry = r.EarningsBeforeExpiry === true;
 
                         const yieldClass = monthlyYield == null
                             ? 'text-gray-500'
@@ -148,32 +228,69 @@
 
                         const scoreClass = score == null
                             ? 'text-gray-500'
-                            : score >= 75
+                            : score >= scoreHighThreshold
                                 ? 'text-emerald-700'
-                                : score >= 55
+                                : score >= scoreMidThreshold
                                     ? 'text-amber-700'
                                     : 'text-red-700';
 
+                        const dteClass = dte == null || Number.isNaN(dte)
+                            ? 'text-gray-500'
+                            : (dte >= minDte && dte <= maxDte)
+                                ? 'text-emerald-600'
+                                : (dte >= (minDte * 0.8) && dte <= (maxDte * 1.2))
+                                    ? 'text-amber-600'
+                                    : 'text-red-600';
+
+                        const yieldCue = monthlyYield == null
+                            ? 'N/A'
+                            : monthlyYield >= targetMonthlyYield
+                                ? 'OK'
+                                : monthlyYield >= (targetMonthlyYield * 0.8)
+                                    ? 'Near'
+                                    : 'Low';
+
+                        const isPass = String(r.Status || '').toUpperCase() === 'PASS';
+                        const statusIcon = isPass ? '✓' : '!';
+                        const statusLabel = isPass ? 'PASS' : 'REVIEW';
+                        const earningsBadgeClass = r.EarningsBeforeExpiry == null
+                            ? 'bg-gray-100 text-gray-700'
+                            : earningsBeforeExpiry
+                                ? 'bg-red-100 text-red-800'
+                                : 'bg-emerald-100 text-emerald-800';
+                        const earningsBadgeText = r.EarningsBeforeExpiry == null
+                            ? 'N/A'
+                            : earningsBeforeExpiry
+                                ? 'Yes'
+                                : 'No';
+
                         return `
                             <tr class="hover:bg-gray-50 transition-colors">
-                                <td class="px-4 py-4 font-bold text-blue-600"><a href="https://finance.yahoo.com/quote/${r.Symbol}/" target="_blank" class="hover:underline">${r.Symbol}</a></td>
-                                <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${r.Name}">${r.Name}</td>
-                                <td class="px-4 py-4">
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${r.Status === 'PASS' ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}">
-                                        ${r.Status}
+                                <td class="px-4 py-4 font-bold text-blue-600"><a href="${symbolHref}" target="_blank" rel="noopener noreferrer" class="hover:underline">${symbolText}</a></td>
+                                <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${nameText}">${nameText}</td>
+                                <td class="px-4 py-4" data-order="${isPass ? 0 : 1}">
+                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${isPass ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}">
+                                        <span aria-hidden="true">${statusIcon}</span>${statusLabel}
                                     </span>
                                 </td>
-                                <td class="px-4 py-4 font-mono text-gray-700 font-medium">${r.Price != null ? r.Price.toFixed(2) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-gray-700">${r.Strike != null ? r.Strike.toFixed(2) : 'N/A'}</td>
-                                <td class="px-4 py-4 text-gray-600">${r.Expiration || 'N/A'}</td>
-                                <td class="px-4 py-4 text-gray-600">${r.DTE != null ? r.DTE : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-gray-700">${r.Premium != null ? r.Premium.toFixed(2) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono font-bold ${yieldClass}">${r.MonthlyYieldPct != null ? r.MonthlyYieldPct.toFixed(2) + '%' : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono ${otmClass}">${r.OTMPct != null ? r.OTMPct.toFixed(2) + '%' : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono ${deltaClass}">${r.Delta != null ? r.Delta.toFixed(3) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono ${spreadClass}">${r.SpreadPct != null ? r.SpreadPct.toFixed(2) + '%' : 'N/A'}</td>
-                                <td class="px-4 py-4 text-gray-600">${r.OpenInterest != null ? r.OpenInterest : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono font-semibold ${scoreClass}">${r.Score != null ? r.Score.toFixed(2) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-gray-700 font-medium text-right">${formatMoney(r.Price)}</td>
+                                <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.Strike)}</td>
+                                <td class="px-4 py-4 text-gray-600">${expirationText}</td>
+                                <td class="px-4 py-4 text-gray-600">${nextEarningsText}</td>
+                                <td class="px-4 py-4 text-center" data-order="${earningsBeforeExpiry ? 1 : 0}">
+                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${earningsBadgeClass}">${earningsBadgeText}</span>
+                                </td>
+                                <td class="px-4 py-4 ${dteClass} text-right">${r.DTE != null ? r.DTE : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.Premium)}</td>
+                                <td class="px-4 py-4 font-mono font-bold ${yieldClass} text-right">
+                                    ${formatPct(r.MonthlyYieldPct)}
+                                    <span class="ml-1 text-xs text-gray-500">${yieldCue}</span>
+                                </td>
+                                <td class="px-4 py-4 font-mono ${otmClass} text-right">${formatPct(r.OTMPct)}</td>
+                                <td class="px-4 py-4 font-mono ${deltaClass} text-right">${r.Delta != null ? r.Delta.toFixed(3) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono ${spreadClass} text-right">${formatPct(r.SpreadPct)}</td>
+                                <td class="px-4 py-4 text-gray-600 text-right">${r.OpenInterest != null ? r.OpenInterest : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono font-semibold ${scoreClass} text-right">${r.Score != null ? r.Score.toFixed(2) : 'N/A'}</td>
                             </tr>
                         `;
                     }).join('');
@@ -181,7 +298,7 @@
                     // Initialize DataTable
                     const table = $('#resultsTable').DataTable({
                         pageLength: 25,
-                        order: [[2, 'asc'], [13, 'desc'], [8, 'desc']],
+                        order: [[2, 'asc'], [15, 'desc'], [10, 'desc']],
                         responsive: true,
                         language: {
                             searchPlaceholder: "Search tickers...",
@@ -191,6 +308,82 @@
                     
                     // Style the search box
                     $('.dataTables_filter input').addClass('bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4');
+
+                    // Quick filters
+                    const passOnlyInput = document.getElementById('filterPassOnly');
+                    const minScoreInput = document.getElementById('filterMinScore');
+                    const minOiInput = document.getElementById('filterMinOi');
+                    const resetFiltersBtn = document.getElementById('resetFilters');
+                    const activeFilterCount = document.getElementById('activeFilterCount');
+
+                    const updateActiveFilterCount = () => {
+                        const active = [
+                            passOnlyInput.checked,
+                            minScoreInput.value !== '',
+                            minOiInput.value !== ''
+                        ].filter(Boolean).length;
+
+                        activeFilterCount.innerText = active === 0 ? 'No filters' : `${active} active filter${active > 1 ? 's' : ''}`;
+                    };
+
+                    const debounce = (fn, wait = 200) => {
+                        let timeoutId;
+                        return (...args) => {
+                            clearTimeout(timeoutId);
+                            timeoutId = setTimeout(() => fn(...args), wait);
+                        };
+                    };
+
+                    const redrawTable = () => {
+                        updateActiveFilterCount();
+                        table.draw();
+                    };
+
+                    const debouncedRedraw = debounce(redrawTable, 180);
+
+                    $.fn.dataTable.ext.search.push(function(settings, rowData) {
+                        if (settings.nTable.id !== 'resultsTable') {
+                            return true;
+                        }
+
+                        const passOnly = passOnlyInput.checked;
+                        const minScore = minScoreInput.value === '' ? null : Number(minScoreInput.value);
+                        const minOi = minOiInput.value === '' ? null : Number(minOiInput.value);
+
+                        const statusText = (rowData[2] || '').toUpperCase();
+                        const scoreText = (rowData[15] || '').replace('%', '').trim();
+                        const oiText = (rowData[14] || '').replace(/,/g, '').trim();
+
+                        const scoreValue = scoreText === 'N/A' ? null : Number(scoreText);
+                        const oiValue = oiText === 'N/A' ? null : Number(oiText);
+
+                        if (passOnly && !statusText.includes('PASS')) {
+                            return false;
+                        }
+                        if (minScore != null && (scoreValue == null || Number.isNaN(scoreValue) || scoreValue < minScore)) {
+                            return false;
+                        }
+                        if (minOi != null && (oiValue == null || Number.isNaN(oiValue) || oiValue < minOi)) {
+                            return false;
+                        }
+
+                        return true;
+                    });
+
+                    passOnlyInput.addEventListener('change', redrawTable);
+                    minScoreInput.addEventListener('input', debouncedRedraw);
+                    minOiInput.addEventListener('input', debouncedRedraw);
+                    minScoreInput.addEventListener('change', redrawTable);
+                    minOiInput.addEventListener('change', redrawTable);
+
+                    resetFiltersBtn.addEventListener('click', () => {
+                        passOnlyInput.checked = false;
+                        minScoreInput.value = '';
+                        minOiInput.value = '';
+                        redrawTable();
+                    });
+
+                    updateActiveFilterCount();
 
                 })
                 .catch(error => {

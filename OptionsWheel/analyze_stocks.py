@@ -55,6 +55,9 @@ DEBUG = False
 
 DEFAULT_SCREENING_CONFIG = {
     "MAX_PRICE": 80.0,
+    "MIN_STOCK_AVG_VOLUME": 500000,
+    "MIN_MARKET_CAP": 500000000,
+    "EXCLUDE_EARNINGS_BEFORE_EXPIRY": True,
     "TARGET_MONTHLY_YIELD_PCT": 1.0,
     "MIN_PREMIUM": 0.15,
     "MIN_DTE": 20,
@@ -135,6 +138,12 @@ def validate_screening_config(cfg):
     if cfg["MAX_PRICE"] <= 0 or cfg["MAX_PRICE"] > 10000:
         errors.append("MAX_PRICE must be in (0, 10000].")
 
+    if cfg["MIN_STOCK_AVG_VOLUME"] < 0 or cfg["MIN_STOCK_AVG_VOLUME"] > 1_000_000_000:
+        errors.append("MIN_STOCK_AVG_VOLUME must be in [0, 1000000000].")
+
+    if cfg["MIN_MARKET_CAP"] < 0 or cfg["MIN_MARKET_CAP"] > 10_000_000_000_000:
+        errors.append("MIN_MARKET_CAP must be in [0, 10000000000000].")
+
     if cfg["MIN_PREMIUM"] <= 0 or cfg["MIN_PREMIUM"] > 100:
         errors.append("MIN_PREMIUM must be in (0, 100].")
 
@@ -176,6 +185,9 @@ def validate_screening_config(cfg):
     if cfg["DIVIDEND_YIELD"] < 0 or cfg["DIVIDEND_YIELD"] > 0.25:
         errors.append("DIVIDEND_YIELD must be in [0, 0.25].")
 
+    if not isinstance(cfg["EXCLUDE_EARNINGS_BEFORE_EXPIRY"], bool):
+        errors.append("EXCLUDE_EARNINGS_BEFORE_EXPIRY must be true/false.")
+
     if errors:
         raise ValueError("Invalid screening configuration:\n- " + "\n- ".join(errors))
 
@@ -189,6 +201,9 @@ SCREENING_CONFIG = validate_screening_config(
 # Options-first screening parameters
 TARGET_MONTHLY_YIELD_PCT = SCREENING_CONFIG["TARGET_MONTHLY_YIELD_PCT"]
 PRICE_LIMIT = SCREENING_CONFIG["MAX_PRICE"]
+MIN_STOCK_AVG_VOLUME = SCREENING_CONFIG["MIN_STOCK_AVG_VOLUME"]
+MIN_MARKET_CAP = SCREENING_CONFIG["MIN_MARKET_CAP"]
+EXCLUDE_EARNINGS_BEFORE_EXPIRY = SCREENING_CONFIG["EXCLUDE_EARNINGS_BEFORE_EXPIRY"]
 MIN_PREMIUM = SCREENING_CONFIG["MIN_PREMIUM"]
 MIN_DTE = SCREENING_CONFIG["MIN_DTE"]
 MAX_DTE = SCREENING_CONFIG["MAX_DTE"]
@@ -220,6 +235,7 @@ _error_stats = {
     "empty_payloads": 0,
     "empty_contract_sets": 0,
     "symbol_analysis_exceptions": 0,
+    "contracts_excluded_earnings": 0,
 }
 
 
@@ -309,6 +325,7 @@ def print_error_summary():
         ("Max retries exceeded", stats["max_retries_exceeded"]),
         ("Symbols with empty payload", stats["empty_payloads"]),
         ("Symbols with no contracts", stats["empty_contract_sets"]),
+        ("Contracts excluded for earnings", stats["contracts_excluded_earnings"]),
         ("Worker analysis exceptions", stats["symbol_analysis_exceptions"]),
     ]
     non_zero_items = [(label, count) for label, count in ordered_items if count > 0]
@@ -394,26 +411,42 @@ def safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES):
 
 def batch_price_filter(tickers):
     candidates = []
+    now_dt = datetime.now(timezone.utc)
     for i in range(0, len(tickers), BATCH_SIZE):
         batch = tickers[i : i + BATCH_SIZE]
         symbols = ",".join(batch)
-        url = f"{BASE_URL}?symbols={symbols}&fields=symbol,shortName,regularMarketPrice,trailingPE"
+        url = (
+            f"{BASE_URL}?symbols={symbols}&fields="
+            "symbol,shortName,regularMarketPrice,trailingPE,"
+            "averageDailyVolume3Month,marketCap,"
+            "earningsTimestamp,earningsTimestampStart,earningsTimestampEnd"
+        )
         data = safe_get(url)
         if data:
             for item in data:
                 price = item.get("regularMarketPrice")
                 pe = item.get("trailingPE")
+                avg_volume_3m = int(
+                    _to_float(item.get("averageDailyVolume3Month")) or 0
+                )
+                market_cap = int(_to_float(item.get("marketCap")) or 0)
+                next_earnings_dt = _extract_next_earnings_dt(item, now_dt)
                 if (
                     price is not None
                     and price < PRICE_LIMIT
                     and pe is not None
                     and pe <= 100
+                    and avg_volume_3m >= MIN_STOCK_AVG_VOLUME
+                    and market_cap >= MIN_MARKET_CAP
                 ):
                     candidates.append(
                         {
                             "symbol": item["symbol"],
                             "price": price,
                             "name": item.get("shortName", ""),
+                            "averageDailyVolume3Month": avg_volume_3m,
+                            "marketCap": market_cap,
+                            "next_earnings_dt": next_earnings_dt,
                         }
                     )
         if SLEEP_TIME > 0:
@@ -550,6 +583,25 @@ def _parse_expiration(value):
             return None
 
     return None
+
+
+def _extract_next_earnings_dt(quote_item, now_dt):
+    if not isinstance(quote_item, dict):
+        return None
+
+    candidates = []
+    for key in ("earningsTimestamp", "earningsTimestampStart", "earningsTimestampEnd"):
+        parsed = _parse_expiration(quote_item.get(key))
+        if parsed is not None:
+            candidates.append(parsed)
+
+    if not candidates:
+        return None
+
+    future_candidates = [dt for dt in candidates if dt >= now_dt]
+    if future_candidates:
+        return min(future_candidates)
+    return max(candidates)
 
 
 def _dte_from_expiration(expiration_dt, now_dt):
@@ -696,6 +748,17 @@ def _evaluate_put_contract(symbol_data, expiration_dt, option, now_dt):
     if dte is None or dte <= 0:
         return None
 
+    next_earnings_dt = symbol_data.get("next_earnings_dt")
+    earnings_before_expiry = (
+        isinstance(next_earnings_dt, datetime)
+        and next_earnings_dt >= now_dt
+        and expiration is not None
+        and next_earnings_dt.date() <= expiration.date()
+    )
+    if EXCLUDE_EARNINGS_BEFORE_EXPIRY and earnings_before_expiry:
+        _bump_error_stat("contracts_excluded_earnings")
+        return None
+
     if delta is None:
         delta = _estimate_put_delta(
             price,
@@ -758,6 +821,10 @@ def _evaluate_put_contract(symbol_data, expiration_dt, option, now_dt):
         "Failed Criterion": failed[0] if len(failed) == 1 else "",
         "Strike": round(strike, 2),
         "Expiration": expiration.strftime("%Y-%m-%d") if expiration else None,
+        "NextEarnings": next_earnings_dt.strftime("%Y-%m-%d")
+        if isinstance(next_earnings_dt, datetime)
+        else None,
+        "EarningsBeforeExpiry": earnings_before_expiry,
         "DTE": dte,
         "Premium": round(premium, 2),
         "Bid": _safe_round(bid),
@@ -902,6 +969,9 @@ def main():
 
     print(
         "Screen config: "
+        f"avgVol3m>={MIN_STOCK_AVG_VOLUME:,}, "
+        f"marketCap>={MIN_MARKET_CAP:,}, "
+        f"excludeEarningsBeforeExpiry={EXCLUDE_EARNINGS_BEFORE_EXPIRY}, "
         f"yield>={TARGET_MONTHLY_YIELD_PCT:.2f}%/mo, "
         f"DTE={MIN_DTE}-{MAX_DTE}, "
         f"|delta|={MIN_ABS_DELTA:.2f}-{MAX_ABS_DELTA:.2f}, "
@@ -932,6 +1002,8 @@ def main():
             "Price",
             "Strike",
             "Expiration",
+            "NextEarnings",
+            "EarningsBeforeExpiry",
             "DTE",
             "Premium",
             "MonthlyYieldPct",

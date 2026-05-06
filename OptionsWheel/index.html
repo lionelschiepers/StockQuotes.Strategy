@@ -13,34 +13,40 @@
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.js"></script>
     <style>
         :root {
-            --bg-page: #0b1324;
-            --bg-surface: #101b33;
-            --bg-elevated: #15223d;
-            --bg-muted: #1a2948;
-            --line-soft: #243759;
-            --line-strong: #315082;
-            --text-main: #dbe7ff;
-            --text-muted: #9fb3d8;
-            --accent: #61a4ff;
-            --accent-weak: #193763;
-            --bg-page-glow-a: #163b6d;
-            --bg-page-glow-b: #1a5f4f;
-            --head-grad-start: #1d2f50;
-            --head-grad-end: #15233d;
-            --row-odd: #15223d;
-            --row-even: #172947;
-            --row-hover: #20365c;
-            --group-divider: #4e6fa6;
-            --paginate-text: #a8bee6;
-            --paginate-hover-bg: #1c3458;
-            --paginate-hover-border: #3a5f95;
-            --paginate-hover-text: #d6e5ff;
-            --summary-start: #162845;
-            --summary-end: #12203a;
-            --control-shell-bg: #132443;
-            --control-shell-border: #2d4a7a;
-            --control-bg: #1a2d50;
-            --control-bg-focus: #203a66;
+            --bg-page: #0d1117;
+            --bg-surface: #0f141b;
+            --bg-elevated: #161b22;
+            --bg-muted: #1c2128;
+            --line-soft: #30363d;
+            --line-strong: #3f4852;
+            --text-main: #c9d1d9;
+            --text-muted: #8b949e;
+            --accent: #58a6ff;
+            --accent-weak: #1f3a5f;
+            --bg-page-glow-a: #0f1b2e;
+            --bg-page-glow-b: #111a24;
+            --head-grad-start: #181e26;
+            --head-grad-end: #141a22;
+            --row-odd: #161b22;
+            --row-even: #1a2028;
+            --row-hover: #222a33;
+            --group-divider: #4b5562;
+            --paginate-text: #97a2af;
+            --paginate-hover-bg: #1f2730;
+            --paginate-hover-border: #3b4652;
+            --paginate-hover-text: #d0d7de;
+            --summary-start: #171c24;
+            --summary-end: #141922;
+            --control-shell-bg: #171e27;
+            --control-shell-border: #353f4b;
+            --control-bg: #0f141b;
+            --control-bg-focus: #1a2330;
+            --ok-text: #3fb950;
+            --warn-text: #d29922;
+            --bad-text: #f85149;
+            --ok-bg: rgba(63, 185, 80, 0.16);
+            --warn-bg: rgba(210, 153, 34, 0.16);
+            --bad-bg: rgba(248, 81, 73, 0.16);
             --symbol-col-width: 9ch;
             --name-col-width: 26ch;
         }
@@ -74,6 +80,12 @@
             --control-shell-border: #ccd9ee;
             --control-bg: #ffffff;
             --control-bg-focus: #f0f6ff;
+            --ok-text: #1f883d;
+            --warn-text: #9a6700;
+            --bad-text: #cf222e;
+            --ok-bg: #dafbe1;
+            --warn-bg: #fff8c5;
+            --bad-bg: #ffebe9;
         }
 
         body {
@@ -103,8 +115,17 @@
             background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
             border: 1px solid var(--line-soft);
             border-radius: 18px;
-            box-shadow: 0 12px 32px rgba(1, 7, 19, 0.28);
+            box-shadow: 0 16px 40px rgba(1, 4, 9, 0.42);
             padding: 1rem;
+        }
+
+        header h1 {
+            color: #f0f6fc !important;
+            letter-spacing: -0.01em;
+        }
+
+        body[data-theme='light'] header h1 {
+            color: #0f1d33 !important;
         }
 
         @media (min-width: 768px) {
@@ -137,6 +158,10 @@
             font-weight: 700;
             letter-spacing: 0.02em;
             transition: all 0.15s ease;
+        }
+
+        .toggle-btn {
+            background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 92%, transparent) 0%, var(--bg-muted) 100%);
         }
 
         .toggle-btn:hover,
@@ -239,7 +264,7 @@
             color: var(--text-main);
             margin-left: 0 !important;
             padding: 0 0.7rem;
-            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(10, 30, 70, 0.18);
+             box-shadow: inset 0 1px 0 rgba(240, 246, 252, 0.03), 0 1px 2px rgba(1, 4, 9, 0.4);
         }
 
         .dataTables_wrapper .dataTables_length select {
@@ -272,7 +297,7 @@
             outline: none;
             border-color: var(--accent) !important;
             background: var(--control-bg-focus) !important;
-            box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.18);
+             box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.22);
         }
 
         .dataTables_wrapper .dataTables_filter input {
@@ -510,6 +535,13 @@
         .border-gray-100, .border-gray-200, .border-gray-300 { border-color: var(--line-soft) !important; }
         .text-gray-900, .text-gray-800, .text-gray-700, .text-gray-600 { color: var(--text-main) !important; }
         .text-gray-500 { color: var(--text-muted) !important; }
+        .text-blue-500, .text-blue-600, .text-indigo-500 { color: var(--accent) !important; }
+        .text-green-500, .text-green-800, .text-emerald-600, .text-emerald-700 { color: var(--ok-text) !important; }
+        .text-amber-500, .text-amber-600, .text-amber-700 { color: var(--warn-text) !important; }
+        .text-red-600, .text-red-700, .text-red-800 { color: var(--bad-text) !important; }
+        .bg-green-100, .bg-emerald-100 { background-color: var(--ok-bg) !important; }
+        .bg-amber-100 { background-color: var(--warn-bg) !important; }
+        .bg-red-100 { background-color: var(--bad-bg) !important; }
         .hover\:bg-gray-50:hover { background-color: var(--bg-muted) !important; }
     </style>
 </head>
@@ -526,12 +558,6 @@
                     <button id="densityUltra" type="button" aria-pressed="false">Ultra</button>
                     <button id="densityCompact" type="button" class="active" aria-pressed="true">Compact</button>
                     <button id="densityComfortable" type="button" aria-pressed="false">Comfortable</button>
-                </div>
-                <div class="segmented" role="group" aria-label="Column widths">
-                    <button id="symbolColNarrow" type="button" class="column-btn" aria-label="Narrow symbol column" title="Shrink Symbol column width">S-</button>
-                    <button id="symbolColWide" type="button" class="column-btn" aria-label="Widen symbol column" title="Expand Symbol column width">S+</button>
-                    <button id="nameColNarrow" type="button" class="column-btn" aria-label="Narrow name column" title="Shrink Name column width">N-</button>
-                    <button id="nameColWide" type="button" class="column-btn" aria-label="Widen name column" title="Expand Name column width">N+</button>
                 </div>
             </div>
         </header>
@@ -615,14 +641,8 @@
             const densityUltraBtn = document.getElementById('densityUltra');
             const densityCompactBtn = document.getElementById('densityCompact');
             const densityComfortableBtn = document.getElementById('densityComfortable');
-            const symbolColNarrowBtn = document.getElementById('symbolColNarrow');
-            const symbolColWideBtn = document.getElementById('symbolColWide');
-            const nameColNarrowBtn = document.getElementById('nameColNarrow');
-            const nameColWideBtn = document.getElementById('nameColWide');
             const themeStorageKey = 'optionsWheelTheme';
             const densityStorageKey = 'optionsWheelDensity';
-            const symbolWidthStorageKey = 'optionsWheelSymbolWidthCh';
-            const nameWidthStorageKey = 'optionsWheelNameWidthCh';
             const columnWidthsStorageKey = 'optionsWheelColumnWidthsPx';
             const columnMinWidthPx = 60;
             const columnMaxWidthPx = 560;
@@ -691,20 +711,6 @@
                 columnWidthStyleEl.textContent = rules.join('\n');
             };
 
-            const applyColumnWidths = (symbolWidthCh, nameWidthCh) => {
-                const symbolWidth = clamp(Number(symbolWidthCh), 9, 16);
-                const nameWidth = clamp(Number(nameWidthCh), 18, 44);
-
-                document.documentElement.style.setProperty('--symbol-col-width', `${symbolWidth}ch`);
-                document.documentElement.style.setProperty('--name-col-width', `${nameWidth}ch`);
-                localStorage.setItem(symbolWidthStorageKey, String(symbolWidth));
-                localStorage.setItem(nameWidthStorageKey, String(nameWidth));
-
-                if (dataTableInstance) {
-                    dataTableInstance.columns.adjust().draw(false);
-                }
-            };
-
             const setColumnWidthPx = (columnIndex, widthPx) => {
                 const safeWidth = Math.round(clamp(Number(widthPx), columnMinWidthPx, columnMaxWidthPx));
                 columnWidthsPx[String(columnIndex)] = safeWidth;
@@ -761,12 +767,9 @@
 
             const savedTheme = localStorage.getItem(themeStorageKey);
             const savedDensity = localStorage.getItem(densityStorageKey);
-            const savedSymbolWidth = localStorage.getItem(symbolWidthStorageKey);
-            const savedNameWidth = localStorage.getItem(nameWidthStorageKey);
 
             applyTheme(savedTheme || 'dark');
             applyDensity(savedDensity || 'compact');
-            applyColumnWidths(savedSymbolWidth ?? 9, savedNameWidth ?? 26);
             applyColumnWidthOverrides();
 
             themeToggleBtn.addEventListener('click', () => {
@@ -777,10 +780,6 @@
             densityUltraBtn.addEventListener('click', () => applyDensity('ultra'));
             densityCompactBtn.addEventListener('click', () => applyDensity('compact'));
             densityComfortableBtn.addEventListener('click', () => applyDensity('comfortable'));
-            symbolColNarrowBtn.addEventListener('click', () => applyColumnWidths((Number(localStorage.getItem(symbolWidthStorageKey)) || 9) - 1, Number(localStorage.getItem(nameWidthStorageKey)) || 26));
-            symbolColWideBtn.addEventListener('click', () => applyColumnWidths((Number(localStorage.getItem(symbolWidthStorageKey)) || 9) + 1, Number(localStorage.getItem(nameWidthStorageKey)) || 26));
-            nameColNarrowBtn.addEventListener('click', () => applyColumnWidths(Number(localStorage.getItem(symbolWidthStorageKey)) || 9, (Number(localStorage.getItem(nameWidthStorageKey)) || 26) - 2));
-            nameColWideBtn.addEventListener('click', () => applyColumnWidths(Number(localStorage.getItem(symbolWidthStorageKey)) || 9, (Number(localStorage.getItem(nameWidthStorageKey)) || 26) + 2));
 
             Promise.all([
                 fetch('analysis_results.json'),

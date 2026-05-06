@@ -4,50 +4,170 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Options Wheel Candidate Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.js"></script>
     <style>
-        .dataTables_wrapper .dataTables_paginate .paginate_button.current {
-            background: #3b82f6 !important;
-            color: white !important;
-            border: 1px solid #3b82f6 !important;
+        :root {
+            --bg-page: #eef3f9;
+            --bg-surface: #ffffff;
+            --bg-muted: #f4f7fb;
+            --line-soft: #dbe4f0;
+            --line-strong: #c5d1e0;
+            --text-main: #0f1d33;
+            --text-muted: #5f6f84;
+            --accent: #2f6fed;
+            --accent-weak: #e8f0ff;
+            --symbol-col-width: 120px;
+            --name-col-width: 220px;
         }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            color: var(--text-main);
+            background:
+                radial-gradient(circle at 0% 0%, #dbe8ff 0%, transparent 40%),
+                radial-gradient(circle at 100% 0%, #dff7f0 0%, transparent 36%),
+                var(--bg-page);
+        }
+
+        .font-mono {
+            font-family: 'IBM Plex Mono', monospace;
+            letter-spacing: -0.02em;
+        }
+
+        .dashboard-shell {
+            background: color-mix(in srgb, var(--bg-surface) 92%, #f7faff);
+            border: 1px solid var(--line-soft);
+            border-radius: 18px;
+            box-shadow: 0 10px 30px rgba(19, 39, 74, 0.08);
+            padding: 1rem;
+        }
+
+        @media (min-width: 768px) {
+            .dashboard-shell {
+                padding: 1.25rem;
+            }
+        }
+
+        #summary > div {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            border: 1px solid var(--line-soft);
+        }
+
         #tableToolbar {
             display: flex;
             align-items: center;
             justify-content: space-between;
             gap: 0.75rem;
             flex-wrap: wrap;
-            margin-bottom: 0.75rem;
+            margin-bottom: 0.65rem;
+            padding: 0.5rem 0.1rem;
+            border-top: 1px solid var(--line-soft);
+            border-bottom: 1px solid var(--line-soft);
         }
+
         #tableToolbar .dataTables_length,
         #tableToolbar .dataTables_filter {
             float: none !important;
             margin: 0;
             padding: 0;
         }
+
         #tableToolbar .dataTables_filter {
             margin-left: auto;
             text-align: right;
         }
-        table.dataTable thead th {
-            border-bottom: 2px solid #e5e7eb !important;
+
+        .dataTables_wrapper .dataTables_length label,
+        .dataTables_wrapper .dataTables_filter label,
+        .dataTables_wrapper .dataTables_info {
+            color: var(--text-muted) !important;
+            font-size: 0.81rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
         }
+
+        .dataTables_wrapper .dataTables_filter input,
+        .dataTables_wrapper .dataTables_length select {
+            border: 1px solid var(--line-strong) !important;
+            background: #ffffff !important;
+            border-radius: 10px;
+            height: 2.15rem;
+            font-size: 0.86rem;
+            color: var(--text-main);
+            margin-left: 0.45rem;
+            padding: 0 0.7rem;
+            box-shadow: 0 1px 2px rgba(10, 30, 70, 0.04);
+        }
+
+        .dataTables_wrapper .dataTables_length select {
+            min-width: 4.1rem;
+            cursor: pointer;
+        }
+
+        .dataTables_wrapper .dataTables_filter input:focus,
+        .dataTables_wrapper .dataTables_length select:focus {
+            outline: none;
+            border-color: var(--accent) !important;
+            box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.18);
+        }
+
         table.dataTable {
-            border-collapse: collapse;
+            border-collapse: separate !important;
+            border-spacing: 0;
+            margin-top: 0 !important;
+            width: 100% !important;
         }
+
+        table.dataTable thead th {
+            border-bottom: 1px solid var(--line-strong) !important;
+            border-top: 1px solid var(--line-soft);
+            background: linear-gradient(180deg, #fbfdff 0%, #f0f5fc 100%) !important;
+            color: #1f314f !important;
+            font-size: 0.74rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            font-weight: 800 !important;
+            padding: 0.64rem 0.72rem !important;
+            white-space: nowrap;
+        }
+
+        #resultsTable tbody td {
+            border-bottom: 1px solid var(--line-soft);
+            padding: 0.52rem 0.72rem !important;
+            line-height: 1.25;
+            white-space: nowrap;
+            font-size: 0.82rem;
+        }
+
+        #resultsTable tbody tr {
+            background: #ffffff;
+            transition: background-color 0.15s ease;
+        }
+
+        #resultsTable tbody tr:nth-child(even) {
+            background: var(--bg-muted);
+        }
+
+        #resultsTable tbody tr:hover {
+            background: #eaf2ff !important;
+        }
+
         #resultsTable {
-            --symbol-col-width: 130px;
+            --symbol-col-width: 120px;
         }
+
         #resultsTable thead th {
             position: sticky;
             top: 0;
-            z-index: 1;
-            background: #f9fafb;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            z-index: 3;
         }
+
         #resultsTable th:nth-child(1),
         #resultsTable td:nth-child(1) {
             position: sticky;
@@ -55,32 +175,89 @@
             min-width: var(--symbol-col-width);
             width: var(--symbol-col-width);
             max-width: var(--symbol-col-width);
-            background: #ffffff;
+            z-index: 2;
         }
+
         #resultsTable th:nth-child(2),
         #resultsTable td:nth-child(2) {
             position: sticky;
             left: var(--symbol-col-width);
-            min-width: 240px;
+            min-width: var(--name-col-width);
+            width: var(--name-col-width);
+            z-index: 2;
+            box-shadow: 1px 0 0 var(--line-soft);
+        }
+
+        #resultsTable tbody tr:nth-child(odd) td:nth-child(1),
+        #resultsTable tbody tr:nth-child(odd) td:nth-child(2) {
             background: #ffffff;
         }
+
+        #resultsTable tbody tr:nth-child(even) td:nth-child(1),
+        #resultsTable tbody tr:nth-child(even) td:nth-child(2) {
+            background: var(--bg-muted);
+        }
+
         #resultsTable thead th:nth-child(1),
         #resultsTable thead th:nth-child(2) {
-            background: #f9fafb;
-            z-index: 4;
+            z-index: 5;
         }
-        #resultsTable tbody td:nth-child(1),
-        #resultsTable tbody td:nth-child(2) {
-            z-index: 2;
+
+        #resultsTable tbody tr:hover td:nth-child(1),
+        #resultsTable tbody tr:hover td:nth-child(2) {
+            background: #eaf2ff;
         }
-        #resultsTable th:nth-child(2),
-        #resultsTable td:nth-child(2) {
-            box-shadow: 1px 0 0 #e5e7eb;
+
+        .dataTables_wrapper .dataTables_info {
+            padding-top: 0.7rem;
+        }
+
+        .dataTables_wrapper .dataTables_paginate {
+            padding-top: 0.45rem;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button {
+            border-radius: 8px !important;
+            border: 1px solid transparent !important;
+            font-weight: 700;
+            color: #38527a !important;
+            min-width: 2rem;
+            padding: 0.25rem 0.45rem !important;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+            background: #edf3ff !important;
+            border-color: #d5e2f9 !important;
+            color: #1f3f7a !important;
+        }
+
+        .dataTables_wrapper .dataTables_paginate .paginate_button.current {
+            background: var(--accent) !important;
+            color: white !important;
+            border: 1px solid var(--accent) !important;
+        }
+
+        @media (max-width: 768px) {
+            #tableToolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            #tableToolbar .dataTables_filter {
+                margin-left: 0;
+                text-align: left;
+            }
+
+            .dataTables_wrapper .dataTables_filter input {
+                width: 100%;
+                margin-left: 0;
+                margin-top: 0.35rem;
+            }
         }
     </style>
 </head>
-<body class="bg-gray-50 p-2 md:p-4">
-    <div class="max-w-7xl mx-auto">
+<body class="p-2 md:p-4">
+    <div class="max-w-[98rem] mx-auto">
         <header class="mb-3">
             <h1 class="text-lg font-semibold text-gray-900 tracking-tight">Options Wheel Candidate Dashboard</h1>
             <p id="last-updated" class="text-gray-500 text-sm mt-1">Loading data...</p>
@@ -95,7 +272,7 @@
         </div>
 
         <!-- Main Table -->
-        <div class="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+        <div class="dashboard-shell">
             <div class="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <div id="thresholdLegend" class="text-xs text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
                     <span class="font-semibold text-gray-700">Legend:</span>
@@ -317,7 +494,7 @@
                                 : 'No';
 
                         return `
-                            <tr class="hover:bg-gray-50 transition-colors">
+                            <tr>
                                 <td class="px-4 py-4 font-bold text-blue-600"><a href="${symbolHref}" target="_blank" rel="noopener noreferrer" class="hover:underline">${symbolText}</a></td>
                                 <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${nameText}">${nameText}</td>
                                 <td class="px-4 py-4" data-order="${isPass ? 0 : 1}">
@@ -363,9 +540,6 @@
                         }
                     });
                     
-                    // Style the search box
-                    $('.dataTables_filter input').addClass('bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500');
-
                     const tableToolbar = document.getElementById('tableToolbar');
                     const dataTableWrapper = document.getElementById('resultsTable_wrapper');
                     const dataTableLength = dataTableWrapper.querySelector('.dataTables_length');

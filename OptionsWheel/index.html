@@ -13,8 +13,42 @@
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.js"></script>
     <style>
         :root {
+            --bg-page: #0b1324;
+            --bg-surface: #101b33;
+            --bg-elevated: #15223d;
+            --bg-muted: #1a2948;
+            --line-soft: #243759;
+            --line-strong: #315082;
+            --text-main: #dbe7ff;
+            --text-muted: #9fb3d8;
+            --accent: #61a4ff;
+            --accent-weak: #193763;
+            --bg-page-glow-a: #163b6d;
+            --bg-page-glow-b: #1a5f4f;
+            --head-grad-start: #1d2f50;
+            --head-grad-end: #15233d;
+            --row-odd: #15223d;
+            --row-even: #172947;
+            --row-hover: #20365c;
+            --group-divider: #4e6fa6;
+            --paginate-text: #a8bee6;
+            --paginate-hover-bg: #1c3458;
+            --paginate-hover-border: #3a5f95;
+            --paginate-hover-text: #d6e5ff;
+            --summary-start: #162845;
+            --summary-end: #12203a;
+            --control-shell-bg: #132443;
+            --control-shell-border: #2d4a7a;
+            --control-bg: #1a2d50;
+            --control-bg-focus: #203a66;
+            --symbol-col-width: 9ch;
+            --name-col-width: 26ch;
+        }
+
+        body[data-theme='light'] {
             --bg-page: #eef3f9;
             --bg-surface: #ffffff;
+            --bg-elevated: #ffffff;
             --bg-muted: #f4f7fb;
             --line-soft: #dbe4f0;
             --line-strong: #c5d1e0;
@@ -22,17 +56,42 @@
             --text-muted: #5f6f84;
             --accent: #2f6fed;
             --accent-weak: #e8f0ff;
-            --symbol-col-width: 120px;
-            --name-col-width: 220px;
+            --bg-page-glow-a: #dbe8ff;
+            --bg-page-glow-b: #dff7f0;
+            --head-grad-start: #fbfdff;
+            --head-grad-end: #f0f5fc;
+            --row-odd: #ffffff;
+            --row-even: #f4f7fb;
+            --row-hover: #eaf2ff;
+            --group-divider: #b7c8e4;
+            --paginate-text: #38527a;
+            --paginate-hover-bg: #edf3ff;
+            --paginate-hover-border: #d5e2f9;
+            --paginate-hover-text: #1f3f7a;
+            --summary-start: #ffffff;
+            --summary-end: #f8fbff;
+            --control-shell-bg: #f3f7fe;
+            --control-shell-border: #ccd9ee;
+            --control-bg: #ffffff;
+            --control-bg-focus: #f0f6ff;
         }
 
         body {
             font-family: 'Manrope', sans-serif;
             color: var(--text-main);
             background:
-                radial-gradient(circle at 0% 0%, #dbe8ff 0%, transparent 40%),
-                radial-gradient(circle at 100% 0%, #dff7f0 0%, transparent 36%),
+                radial-gradient(circle at 0% 0%, var(--bg-page-glow-a) 0%, transparent 40%),
+                radial-gradient(circle at 100% 0%, var(--bg-page-glow-b) 0%, transparent 36%),
                 var(--bg-page);
+            transition: background-color 0.2s ease, color 0.2s ease;
+        }
+
+        body[data-theme='dark'] {
+            color-scheme: dark;
+        }
+
+        body[data-theme='light'] {
+            color-scheme: light;
         }
 
         .font-mono {
@@ -41,10 +100,10 @@
         }
 
         .dashboard-shell {
-            background: color-mix(in srgb, var(--bg-surface) 92%, #f7faff);
+            background: color-mix(in srgb, var(--bg-surface) 94%, transparent);
             border: 1px solid var(--line-soft);
             border-radius: 18px;
-            box-shadow: 0 10px 30px rgba(19, 39, 74, 0.08);
+            box-shadow: 0 12px 32px rgba(1, 7, 19, 0.28);
             padding: 1rem;
         }
 
@@ -55,8 +114,64 @@
         }
 
         #summary > div {
-            background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+            background: linear-gradient(180deg, var(--summary-start) 0%, var(--summary-end) 100%);
             border: 1px solid var(--line-soft);
+        }
+
+        .top-controls {
+            display: flex;
+            gap: 0.6rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .toggle-btn,
+        .segmented button {
+            height: 2.05rem;
+            border: 1px solid var(--line-strong);
+            border-radius: 10px;
+            background: var(--bg-elevated);
+            color: var(--text-main);
+            padding: 0 0.7rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            letter-spacing: 0.02em;
+            transition: all 0.15s ease;
+        }
+
+        .toggle-btn:hover,
+        .segmented button:hover {
+            border-color: var(--accent);
+            background: color-mix(in srgb, var(--bg-elevated) 85%, var(--accent));
+        }
+
+        .column-btn {
+            min-width: 2.25rem;
+            text-align: center;
+            padding: 0 0.5rem;
+        }
+
+        .segmented {
+            display: inline-flex;
+            border: 1px solid var(--line-strong);
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--bg-elevated);
+        }
+
+        .segmented button {
+            border: 0;
+            border-radius: 0;
+            padding: 0 0.75rem;
+        }
+
+        .segmented button + button {
+            border-left: 1px solid var(--line-soft);
+        }
+
+        .segmented button.active {
+            background: var(--accent);
+            color: #ffffff;
         }
 
         #tableToolbar {
@@ -92,29 +207,81 @@
             letter-spacing: 0.02em;
         }
 
+        .dataTables_wrapper .dataTables_length label,
+        .dataTables_wrapper .dataTables_filter label {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.28rem 0.42rem;
+            border-radius: 12px;
+            border: 1px solid var(--control-shell-border);
+            background: linear-gradient(180deg, color-mix(in srgb, var(--control-shell-bg) 92%, transparent) 0%, var(--control-shell-bg) 100%);
+        }
+
+        .dataTables_wrapper .dataTables_length label {
+            border: 0;
+            background: transparent;
+            padding: 0;
+        }
+
+        .dataTables_wrapper .dataTables_filter label {
+            min-width: clamp(14rem, 28vw, 19rem);
+            justify-content: space-between;
+        }
+
         .dataTables_wrapper .dataTables_filter input,
         .dataTables_wrapper .dataTables_length select {
             border: 1px solid var(--line-strong) !important;
-            background: #ffffff !important;
+            background: var(--control-bg) !important;
             border-radius: 10px;
             height: 2.15rem;
             font-size: 0.86rem;
             color: var(--text-main);
-            margin-left: 0.45rem;
+            margin-left: 0 !important;
             padding: 0 0.7rem;
-            box-shadow: 0 1px 2px rgba(10, 30, 70, 0.04);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 1px 2px rgba(10, 30, 70, 0.18);
         }
 
         .dataTables_wrapper .dataTables_length select {
             min-width: 4.1rem;
             cursor: pointer;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+            padding-right: 1.9rem;
+            font-weight: 700;
+            background-image:
+                linear-gradient(45deg, transparent 50%, color-mix(in srgb, var(--text-muted) 82%, transparent) 50%),
+                linear-gradient(135deg, color-mix(in srgb, var(--text-muted) 82%, transparent) 50%, transparent 50%),
+                linear-gradient(180deg, color-mix(in srgb, var(--control-bg) 92%, transparent), var(--control-bg));
+            background-position:
+                calc(100% - 13px) calc(50% - 2px),
+                calc(100% - 8px) calc(50% - 2px),
+                0 0;
+            background-size: 5px 5px, 5px 5px, 100% 100%;
+            background-repeat: no-repeat;
+        }
+
+        .dataTables_wrapper .dataTables_length select option {
+            background: var(--bg-elevated);
+            color: var(--text-main);
         }
 
         .dataTables_wrapper .dataTables_filter input:focus,
         .dataTables_wrapper .dataTables_length select:focus {
             outline: none;
             border-color: var(--accent) !important;
+            background: var(--control-bg-focus) !important;
             box-shadow: 0 0 0 3px rgba(47, 111, 237, 0.18);
+        }
+
+        .dataTables_wrapper .dataTables_filter input {
+            flex: 1;
+        }
+
+        .dataTables_wrapper .dataTables_filter input::placeholder {
+            color: color-mix(in srgb, var(--text-muted) 80%, transparent);
+            font-weight: 600;
         }
 
         table.dataTable {
@@ -127,14 +294,45 @@
         table.dataTable thead th {
             border-bottom: 1px solid var(--line-strong) !important;
             border-top: 1px solid var(--line-soft);
-            background: linear-gradient(180deg, #fbfdff 0%, #f0f5fc 100%) !important;
-            color: #1f314f !important;
+            background: linear-gradient(180deg, var(--head-grad-start) 0%, var(--head-grad-end) 100%) !important;
+            color: var(--text-main) !important;
             font-size: 0.74rem;
             text-transform: uppercase;
             letter-spacing: 0.04em;
             font-weight: 800 !important;
             padding: 0.64rem 0.72rem !important;
             white-space: nowrap;
+            position: relative;
+        }
+
+        #resultsTable thead th .resize-handle {
+            position: absolute;
+            top: 0;
+            right: -4px;
+            width: 8px;
+            height: 100%;
+            cursor: col-resize;
+            user-select: none;
+            touch-action: none;
+            z-index: 8;
+        }
+
+        #resultsTable thead th .resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 22%;
+            bottom: 22%;
+            left: 3px;
+            width: 2px;
+            border-radius: 1px;
+            background: color-mix(in srgb, var(--text-muted) 75%, transparent);
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+
+        #resultsTable thead th:hover .resize-handle::after,
+        #resultsTable thead th.resizing .resize-handle::after {
+            opacity: 0.95;
         }
 
         #resultsTable tbody td {
@@ -146,20 +344,16 @@
         }
 
         #resultsTable tbody tr {
-            background: #ffffff;
+            background: var(--row-odd);
             transition: background-color 0.15s ease;
         }
 
         #resultsTable tbody tr:nth-child(even) {
-            background: var(--bg-muted);
+            background: var(--row-even);
         }
 
         #resultsTable tbody tr:hover {
-            background: #eaf2ff !important;
-        }
-
-        #resultsTable {
-            --symbol-col-width: 120px;
+            background: var(--row-hover) !important;
         }
 
         #resultsTable thead th {
@@ -190,12 +384,12 @@
 
         #resultsTable tbody tr:nth-child(odd) td:nth-child(1),
         #resultsTable tbody tr:nth-child(odd) td:nth-child(2) {
-            background: #ffffff;
+            background: var(--row-odd);
         }
 
         #resultsTable tbody tr:nth-child(even) td:nth-child(1),
         #resultsTable tbody tr:nth-child(even) td:nth-child(2) {
-            background: var(--bg-muted);
+            background: var(--row-even);
         }
 
         #resultsTable thead th:nth-child(1),
@@ -205,7 +399,59 @@
 
         #resultsTable tbody tr:hover td:nth-child(1),
         #resultsTable tbody tr:hover td:nth-child(2) {
-            background: #eaf2ff;
+            background: var(--row-hover);
+        }
+
+        #resultsTable th:nth-child(4),
+        #resultsTable td:nth-child(4),
+        #resultsTable th:nth-child(12),
+        #resultsTable td:nth-child(12),
+        #resultsTable th:nth-child(17),
+        #resultsTable td:nth-child(17),
+        #resultsTable th:nth-child(20),
+        #resultsTable td:nth-child(20) {
+            border-left: 2px solid var(--group-divider) !important;
+        }
+
+        #resultsTable thead th[data-group]::before {
+            content: attr(data-group);
+            display: block;
+            font-size: 0.58rem;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            color: var(--text-muted);
+            margin-bottom: 0.16rem;
+        }
+
+        body[data-density='compact'] table.dataTable thead th {
+            font-size: 0.7rem;
+            padding: 0.5rem 0.62rem !important;
+        }
+
+        body[data-density='compact'] #resultsTable tbody td {
+            padding: 0.42rem 0.62rem !important;
+            font-size: 0.77rem;
+        }
+
+        body[data-density='ultra'] table.dataTable thead th {
+            font-size: 0.65rem;
+            padding: 0.42rem 0.52rem !important;
+        }
+
+        body[data-density='ultra'] #resultsTable tbody td {
+            padding: 0.34rem 0.52rem !important;
+            font-size: 0.71rem;
+            line-height: 1.14;
+        }
+
+        body[data-density='comfortable'] table.dataTable thead th {
+            font-size: 0.78rem;
+            padding: 0.74rem 0.8rem !important;
+        }
+
+        body[data-density='comfortable'] #resultsTable tbody td {
+            padding: 0.66rem 0.8rem !important;
+            font-size: 0.86rem;
         }
 
         .dataTables_wrapper .dataTables_info {
@@ -220,15 +466,15 @@
             border-radius: 8px !important;
             border: 1px solid transparent !important;
             font-weight: 700;
-            color: #38527a !important;
+            color: var(--paginate-text) !important;
             min-width: 2rem;
             padding: 0.25rem 0.45rem !important;
         }
 
         .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
-            background: #edf3ff !important;
-            border-color: #d5e2f9 !important;
-            color: #1f3f7a !important;
+            background: var(--paginate-hover-bg) !important;
+            border-color: var(--paginate-hover-border) !important;
+            color: var(--paginate-hover-text) !important;
         }
 
         .dataTables_wrapper .dataTables_paginate .paginate_button.current {
@@ -253,14 +499,41 @@
                 margin-left: 0;
                 margin-top: 0.35rem;
             }
+
+            .top-controls {
+                justify-content: flex-start;
+            }
         }
+
+        .bg-white { background-color: var(--bg-elevated) !important; }
+        .bg-gray-50 { background-color: var(--bg-muted) !important; }
+        .border-gray-100, .border-gray-200, .border-gray-300 { border-color: var(--line-soft) !important; }
+        .text-gray-900, .text-gray-800, .text-gray-700, .text-gray-600 { color: var(--text-main) !important; }
+        .text-gray-500 { color: var(--text-muted) !important; }
+        .hover\:bg-gray-50:hover { background-color: var(--bg-muted) !important; }
     </style>
 </head>
-<body class="p-2 md:p-4">
+<body class="p-2 md:p-4" data-theme="dark" data-density="compact">
     <div class="max-w-[98rem] mx-auto">
-        <header class="mb-3">
-            <h1 class="text-lg font-semibold text-gray-900 tracking-tight">Options Wheel Candidate Dashboard</h1>
-            <p id="last-updated" class="text-gray-500 text-sm mt-1">Loading data...</p>
+        <header class="mb-3 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+                <h1 class="text-lg font-semibold text-gray-900 tracking-tight">Options Wheel Candidate Dashboard</h1>
+                <p id="last-updated" class="text-gray-500 text-sm mt-1">Loading data...</p>
+            </div>
+            <div class="top-controls">
+                <button id="themeToggle" type="button" class="toggle-btn">Switch to Light Mode</button>
+                <div class="segmented" role="group" aria-label="Row density">
+                    <button id="densityUltra" type="button" aria-pressed="false">Ultra</button>
+                    <button id="densityCompact" type="button" class="active" aria-pressed="true">Compact</button>
+                    <button id="densityComfortable" type="button" aria-pressed="false">Comfortable</button>
+                </div>
+                <div class="segmented" role="group" aria-label="Column widths">
+                    <button id="symbolColNarrow" type="button" class="column-btn" aria-label="Narrow symbol column" title="Shrink Symbol column width">S-</button>
+                    <button id="symbolColWide" type="button" class="column-btn" aria-label="Widen symbol column" title="Expand Symbol column width">S+</button>
+                    <button id="nameColNarrow" type="button" class="column-btn" aria-label="Narrow name column" title="Shrink Name column width">N-</button>
+                    <button id="nameColWide" type="button" class="column-btn" aria-label="Widen name column" title="Expand Name column width">N+</button>
+                </div>
+            </div>
         </header>
         
         <!-- Summary Cards -->
@@ -307,7 +580,7 @@
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Ticker symbol for the stock.">Symbol</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Company name.">Name</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Whether the candidate passed all screening criteria.">Status</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Current underlying stock price.">Price</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="CONTRACT" title="Current underlying stock price.">Price</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Put option strike price evaluated for the wheel.">Strike</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Option expiration date.">Exp</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Next known earnings date for the underlying.">Next Earn</th>
@@ -315,15 +588,15 @@
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Days to expiration.">DTE</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Estimated premium collected per share.">Premium</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Estimated monthly yield percentage from premium.">Mo Yield%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Out-of-the-money percentage from current price to strike.">OTM%</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="RISK" title="Out-of-the-money percentage from current price to strike.">OTM%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Option delta, indicating probability-like sensitivity to price moves.">Delta</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Bid-ask spread as a percentage of option price (lower is better).">Spread%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Open interest (number of open option contracts).">OI</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="IV Rank: how current implied volatility compares to historical range (0-1). Higher = IV is elevated = better for selling.">IVRank</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="RSI(14): Relative Strength Index. Below 30 = oversold, above 70 = overbought.">RSI</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="TECHNICALS" title="RSI(14): Relative Strength Index. Below 30 = oversold, above 70 = overbought.">RSI</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="ADX(14): Average Directional Index. Above 25 = strong trend.">ADX</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Price distance from EMA50 in percent. Negative = below EMA50.">Diff%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Composite ranking score: yield + OTM distance + liquidity (OI/volume) + spread quality + DTE fit + IV. Higher is better.">Score</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="COMPOSITE" title="Composite ranking score: yield + OTM distance + liquidity (OI/volume) + spread quality + DTE fit + IV. Higher is better.">Score</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody" class="divide-y divide-gray-200">
@@ -337,6 +610,178 @@
 
     <script>
         $(document).ready(function() {
+            const bodyEl = document.body;
+            const themeToggleBtn = document.getElementById('themeToggle');
+            const densityUltraBtn = document.getElementById('densityUltra');
+            const densityCompactBtn = document.getElementById('densityCompact');
+            const densityComfortableBtn = document.getElementById('densityComfortable');
+            const symbolColNarrowBtn = document.getElementById('symbolColNarrow');
+            const symbolColWideBtn = document.getElementById('symbolColWide');
+            const nameColNarrowBtn = document.getElementById('nameColNarrow');
+            const nameColWideBtn = document.getElementById('nameColWide');
+            const themeStorageKey = 'optionsWheelTheme';
+            const densityStorageKey = 'optionsWheelDensity';
+            const symbolWidthStorageKey = 'optionsWheelSymbolWidthCh';
+            const nameWidthStorageKey = 'optionsWheelNameWidthCh';
+            const columnWidthsStorageKey = 'optionsWheelColumnWidthsPx';
+            const columnMinWidthPx = 60;
+            const columnMaxWidthPx = 560;
+            const columnWidthStyleEl = document.createElement('style');
+            columnWidthStyleEl.id = 'columnWidthOverrides';
+            document.head.appendChild(columnWidthStyleEl);
+
+            let dataTableInstance = null;
+            let columnWidthsPx = (() => {
+                try {
+                    const parsed = JSON.parse(localStorage.getItem(columnWidthsStorageKey) || '{}');
+                    return parsed && typeof parsed === 'object' ? parsed : {};
+                } catch {
+                    return {};
+                }
+            })();
+
+            const applyTheme = theme => {
+                const safeTheme = theme === 'light' ? 'light' : 'dark';
+                bodyEl.setAttribute('data-theme', safeTheme);
+                themeToggleBtn.textContent = safeTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
+                localStorage.setItem(themeStorageKey, safeTheme);
+            };
+
+            const applyDensity = density => {
+                const safeDensity = ['ultra', 'compact', 'comfortable'].includes(density) ? density : 'compact';
+                bodyEl.setAttribute('data-density', safeDensity);
+                densityUltraBtn.classList.toggle('active', safeDensity === 'ultra');
+                densityUltraBtn.setAttribute('aria-pressed', safeDensity === 'ultra' ? 'true' : 'false');
+                densityCompactBtn.classList.toggle('active', safeDensity === 'compact');
+                densityCompactBtn.setAttribute('aria-pressed', safeDensity === 'compact' ? 'true' : 'false');
+                densityComfortableBtn.classList.toggle('active', safeDensity === 'comfortable');
+                densityComfortableBtn.setAttribute('aria-pressed', safeDensity === 'comfortable' ? 'true' : 'false');
+                localStorage.setItem(densityStorageKey, safeDensity);
+
+                if (dataTableInstance) {
+                    dataTableInstance.columns.adjust().draw(false);
+                }
+            };
+
+            const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+            const persistColumnWidths = () => {
+                localStorage.setItem(columnWidthsStorageKey, JSON.stringify(columnWidthsPx));
+            };
+
+            const applyColumnWidthOverrides = () => {
+                const rules = [];
+
+                Object.entries(columnWidthsPx).forEach(([rawIndex, rawWidth]) => {
+                    const index = Number(rawIndex);
+                    const width = clamp(Number(rawWidth), columnMinWidthPx, columnMaxWidthPx);
+                    if (!Number.isInteger(index) || index < 1 || Number.isNaN(width)) {
+                        return;
+                    }
+
+                    if (index === 1) {
+                        document.documentElement.style.setProperty('--symbol-col-width', `${width}px`);
+                    } else if (index === 2) {
+                        document.documentElement.style.setProperty('--name-col-width', `${width}px`);
+                    }
+
+                    rules.push(`#resultsTable th:nth-child(${index}), #resultsTable td:nth-child(${index}) { min-width: ${width}px; width: ${width}px; }`);
+                });
+
+                columnWidthStyleEl.textContent = rules.join('\n');
+            };
+
+            const applyColumnWidths = (symbolWidthCh, nameWidthCh) => {
+                const symbolWidth = clamp(Number(symbolWidthCh), 9, 16);
+                const nameWidth = clamp(Number(nameWidthCh), 18, 44);
+
+                document.documentElement.style.setProperty('--symbol-col-width', `${symbolWidth}ch`);
+                document.documentElement.style.setProperty('--name-col-width', `${nameWidth}ch`);
+                localStorage.setItem(symbolWidthStorageKey, String(symbolWidth));
+                localStorage.setItem(nameWidthStorageKey, String(nameWidth));
+
+                if (dataTableInstance) {
+                    dataTableInstance.columns.adjust().draw(false);
+                }
+            };
+
+            const setColumnWidthPx = (columnIndex, widthPx) => {
+                const safeWidth = Math.round(clamp(Number(widthPx), columnMinWidthPx, columnMaxWidthPx));
+                columnWidthsPx[String(columnIndex)] = safeWidth;
+                applyColumnWidthOverrides();
+                persistColumnWidths();
+
+                if (dataTableInstance) {
+                    dataTableInstance.columns.adjust().draw(false);
+                }
+            };
+
+            const attachColumnResizeHandles = () => {
+                const headers = document.querySelectorAll('#resultsTable thead th');
+
+                headers.forEach((headerCell, idx) => {
+                    if (headerCell.querySelector('.resize-handle')) {
+                        return;
+                    }
+
+                    const columnIndex = idx + 1;
+                    const handle = document.createElement('span');
+                    handle.className = 'resize-handle';
+                    handle.setAttribute('aria-hidden', 'true');
+                    headerCell.appendChild(handle);
+
+                    handle.addEventListener('pointerdown', event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+
+                        const startX = event.clientX;
+                        const startWidth = headerCell.getBoundingClientRect().width;
+
+                        headerCell.classList.add('resizing');
+                        document.body.style.cursor = 'col-resize';
+                        document.body.style.userSelect = 'none';
+
+                        const onPointerMove = moveEvent => {
+                            const delta = moveEvent.clientX - startX;
+                            setColumnWidthPx(columnIndex, startWidth + delta);
+                        };
+
+                        const onPointerUp = () => {
+                            headerCell.classList.remove('resizing');
+                            document.body.style.cursor = '';
+                            document.body.style.userSelect = '';
+                            window.removeEventListener('pointermove', onPointerMove);
+                        };
+
+                        window.addEventListener('pointermove', onPointerMove);
+                        window.addEventListener('pointerup', onPointerUp, { once: true });
+                    });
+                });
+            };
+
+            const savedTheme = localStorage.getItem(themeStorageKey);
+            const savedDensity = localStorage.getItem(densityStorageKey);
+            const savedSymbolWidth = localStorage.getItem(symbolWidthStorageKey);
+            const savedNameWidth = localStorage.getItem(nameWidthStorageKey);
+
+            applyTheme(savedTheme || 'dark');
+            applyDensity(savedDensity || 'compact');
+            applyColumnWidths(savedSymbolWidth ?? 9, savedNameWidth ?? 26);
+            applyColumnWidthOverrides();
+
+            themeToggleBtn.addEventListener('click', () => {
+                const nextTheme = bodyEl.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                applyTheme(nextTheme);
+            });
+
+            densityUltraBtn.addEventListener('click', () => applyDensity('ultra'));
+            densityCompactBtn.addEventListener('click', () => applyDensity('compact'));
+            densityComfortableBtn.addEventListener('click', () => applyDensity('comfortable'));
+            symbolColNarrowBtn.addEventListener('click', () => applyColumnWidths((Number(localStorage.getItem(symbolWidthStorageKey)) || 9) - 1, Number(localStorage.getItem(nameWidthStorageKey)) || 26));
+            symbolColWideBtn.addEventListener('click', () => applyColumnWidths((Number(localStorage.getItem(symbolWidthStorageKey)) || 9) + 1, Number(localStorage.getItem(nameWidthStorageKey)) || 26));
+            nameColNarrowBtn.addEventListener('click', () => applyColumnWidths(Number(localStorage.getItem(symbolWidthStorageKey)) || 9, (Number(localStorage.getItem(nameWidthStorageKey)) || 26) - 2));
+            nameColWideBtn.addEventListener('click', () => applyColumnWidths(Number(localStorage.getItem(symbolWidthStorageKey)) || 9, (Number(localStorage.getItem(nameWidthStorageKey)) || 26) + 2));
+
             Promise.all([
                 fetch('analysis_results.json'),
                 fetch('screening_config.json')
@@ -410,7 +855,8 @@
                     const tableBody = document.getElementById('tableBody');
                     tableBody.innerHTML = data.results.map(r => {
                         const symbolRaw = r.Symbol != null ? String(r.Symbol) : '';
-                        const symbolText = escapeHtml(symbolRaw || 'N/A');
+                        const symbolDisplayRaw = symbolRaw.length > 9 ? `${symbolRaw.slice(0, 8)}...` : (symbolRaw || 'N/A');
+                        const symbolText = escapeHtml(symbolDisplayRaw);
                         const symbolHref = `https://finance.yahoo.com/quote/${encodeURIComponent(symbolRaw)}/`;
                         const nameText = escapeHtml(r.Name != null ? String(r.Name) : 'N/A');
                         const expirationText = escapeHtml(r.Expiration != null ? String(r.Expiration) : 'N/A');
@@ -495,7 +941,7 @@
 
                         return `
                             <tr>
-                                <td class="px-4 py-4 font-bold text-blue-600"><a href="${symbolHref}" target="_blank" rel="noopener noreferrer" class="hover:underline">${symbolText}</a></td>
+                                <td class="px-4 py-4 font-bold text-blue-600 font-mono" title="${escapeHtml(symbolRaw || 'N/A')}"><a href="${symbolHref}" target="_blank" rel="noopener noreferrer" class="hover:underline">${symbolText}</a></td>
                                 <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${nameText}">${nameText}</td>
                                 <td class="px-4 py-4" data-order="${isPass ? 0 : 1}">
                                     <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${isPass ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}">
@@ -539,6 +985,9 @@
                             search: ""
                         }
                     });
+                    dataTableInstance = table;
+                    applyColumnWidthOverrides();
+                    attachColumnResizeHandles();
                     
                     const tableToolbar = document.getElementById('tableToolbar');
                     const dataTableWrapper = document.getElementById('resultsTable_wrapper');

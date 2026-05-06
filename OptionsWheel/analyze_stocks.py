@@ -75,6 +75,8 @@ DEFAULT_SCREENING_CONFIG = {
     "OPTIONS_MAX_RETRIES": 8,
     "RISK_FREE_RATE": 0.0,
     "DIVIDEND_YIELD": 0.0,
+    "MIN_IV_RANK": 0.0,
+    "FILTER_DOWNTRENDS": True,
 }
 
 
@@ -186,6 +188,12 @@ def validate_screening_config(cfg):
     if cfg["DIVIDEND_YIELD"] < 0 or cfg["DIVIDEND_YIELD"] > 0.25:
         errors.append("DIVIDEND_YIELD must be in [0, 0.25].")
 
+    if cfg["MIN_IV_RANK"] < 0 or cfg["MIN_IV_RANK"] > 1.0:
+        errors.append("MIN_IV_RANK must be in [0, 1.0].")
+
+    if not isinstance(cfg["FILTER_DOWNTRENDS"], bool):
+        errors.append("FILTER_DOWNTRENDS must be true/false.")
+
     if not isinstance(cfg["EXCLUDE_EARNINGS_BEFORE_EXPIRY"], bool):
         errors.append("EXCLUDE_EARNINGS_BEFORE_EXPIRY must be true/false.")
 
@@ -220,6 +228,8 @@ OPTIONS_REQUEST_TIMEOUT = SCREENING_CONFIG["OPTIONS_REQUEST_TIMEOUT"]
 OPTIONS_MAX_RETRIES = SCREENING_CONFIG["OPTIONS_MAX_RETRIES"]
 RISK_FREE_RATE = SCREENING_CONFIG["RISK_FREE_RATE"]
 DIVIDEND_YIELD = SCREENING_CONFIG["DIVIDEND_YIELD"]
+MIN_IV_RANK = SCREENING_CONFIG["MIN_IV_RANK"]
+FILTER_DOWNTRENDS = SCREENING_CONFIG["FILTER_DOWNTRENDS"]
 
 _thread_local = threading.local()
 _rate_limit_lock = threading.Lock()
@@ -530,6 +540,105 @@ def calculate_rvi(series, std_period=10, smooth_period=14):
 
     rvi = 100 * (avg_up / (avg_up + avg_down))
     return rvi
+
+
+def fetch_historical_indicators(symbol):
+    """Fetch historical prices and compute EMA50, RSI, ADX, RVI, MACD, and HV-based IV rank data."""
+    from datetime import datetime, timedelta
+
+    to_date = datetime.now().strftime("%Y-%m-%d")
+    from_date = (datetime.now() - timedelta(days=HIST_DAYS)).strftime("%Y-%m-%d")
+    url = f"{HIST_URL}?ticker={symbol}&from={from_date}&to={to_date}&interval=1d"
+    data = safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES)
+    if not data:
+        return None
+    # API returns {"meta": ..., "quotes": [...], ...} or a flat list
+    if isinstance(data, dict):
+        data = data.get("quotes") or data.get("prices") or []
+    if not isinstance(data, list) or len(data) < 50:
+        return None
+
+    df = pd.DataFrame(data)
+    # Normalize column names (API may return various casings)
+    df.columns = [c.lower() for c in df.columns]
+
+    required = {"close", "high", "low"}
+    if not required.issubset(set(df.columns)):
+        return None
+
+    df["close"] = pd.to_numeric(df["close"], errors="coerce")
+    df["high"] = pd.to_numeric(df["high"], errors="coerce")
+    df["low"] = pd.to_numeric(df["low"], errors="coerce")
+    df = df.dropna(subset=["close", "high", "low"]).reset_index(drop=True)
+
+    if len(df) < 50:
+        return None
+
+    close = df["close"]
+
+    ema50 = calculate_ema(close, 50).iloc[-1]
+    rsi = calculate_rsi(close, 14).iloc[-1]
+    adx = calculate_adx(df, 14).iloc[-1]
+    rvi = calculate_rvi(close).iloc[-1]
+    macd_line, signal_line = calculate_macd(close)
+    macd_val = macd_line.iloc[-1]
+    signal_val = signal_line.iloc[-1]
+
+    # Compute historical volatility (annualized) for IV rank comparison
+    log_returns = np.log(close / close.shift(1)).dropna()
+    hv_current = log_returns[-20:].std() * np.sqrt(252)  # 20-day HV
+    hv_high = log_returns.rolling(20).std().max() * np.sqrt(
+        252
+    )  # max 20-day HV in period
+    hv_low = log_returns.rolling(20).std().min() * np.sqrt(
+        252
+    )  # min 20-day HV in period
+
+    return {
+        "ema50": float(ema50) if not np.isnan(ema50) else None,
+        "rsi": float(rsi) if not np.isnan(rsi) else None,
+        "adx": float(adx) if not np.isnan(adx) else None,
+        "rvi": float(rvi) if not np.isnan(rvi) else None,
+        "macd": float(macd_val) if not np.isnan(macd_val) else None,
+        "signal": float(signal_val) if not np.isnan(signal_val) else None,
+        "price": float(close.iloc[-1]),
+        "hv_current": float(hv_current) if not np.isnan(hv_current) else None,
+        "hv_high": float(hv_high) if not np.isnan(hv_high) else None,
+        "hv_low": float(hv_low) if not np.isnan(hv_low) else None,
+    }
+
+
+def compute_iv_rank(option_iv, hv_low, hv_high):
+    """Compute IV rank: how current option IV compares to historical volatility range."""
+    if option_iv is None or hv_low is None or hv_high is None:
+        return None
+    if hv_high <= hv_low:
+        return None
+    rank = (option_iv - hv_low) / (hv_high - hv_low)
+    return max(0.0, min(1.0, rank))
+
+
+def is_downtrend(indicators):
+    """Return True if the stock appears to be in a strong downtrend (bad for selling puts)."""
+    if indicators is None:
+        return False  # Can't determine, don't filter
+
+    price = indicators.get("price")
+    ema50 = indicators.get("ema50")
+    rsi = indicators.get("rsi")
+    adx = indicators.get("adx")
+
+    if price is None or ema50 is None:
+        return False
+
+    # Strong downtrend: price well below EMA50, high ADX (trending), and oversold RSI
+    below_ema = price < ema50 * 0.95  # More than 5% below EMA50
+    strong_trend = adx is not None and adx > 25
+    weak_rsi = rsi is not None and rsi < 35
+
+    # Need at least 2 of 3 signals to flag as downtrend
+    signals = sum([below_ema, strong_trend and below_ema, weak_rsi and below_ema])
+    return signals >= 2
 
 
 def format_eta(seconds):
@@ -853,6 +962,15 @@ def _evaluate_put_contract(symbol_data, expiration_dt, option, now_dt):
 
 def analyze_single_symbol_options(symbol_data):
     symbol = symbol_data["symbol"]
+
+    # Fetch historical indicators for trend/IV analysis
+    indicators = fetch_historical_indicators(symbol)
+
+    # Filter out strong downtrends
+    if FILTER_DOWNTRENDS and is_downtrend(indicators):
+        debug_log(f"Skipping {symbol}: strong downtrend detected")
+        return [], []
+
     url = (
         f"{OPTIONS_URL}?ticker={symbol}&filter=puts&limit=25"
         f"&expirationDatesCount={MAX_EXPIRATIONS_PER_SYMBOL}"
@@ -881,6 +999,41 @@ def analyze_single_symbol_options(symbol_data):
             continue
 
         contract_data, failed = evaluated
+
+        # Enrich with technical indicators
+        if indicators:
+            contract_data["EMA50"] = _safe_round(indicators.get("ema50"))
+            contract_data["ADX"] = _safe_round(indicators.get("adx"))
+            contract_data["RSI"] = _safe_round(indicators.get("rsi"))
+            contract_data["RVI"] = _safe_round(indicators.get("rvi"))
+            contract_data["MACD"] = _safe_round(indicators.get("macd"), 3)
+            contract_data["Signal"] = _safe_round(indicators.get("signal"), 3)
+            if indicators.get("ema50") and indicators.get("price"):
+                diff_pct = (
+                    (indicators["price"] - indicators["ema50"]) / indicators["ema50"]
+                ) * 100
+                contract_data["DiffPct"] = _safe_round(diff_pct)
+
+        # IV Rank filter
+        iv = contract_data.get("ImpliedVolatility")
+        if indicators and iv is not None:
+            iv_rank = compute_iv_rank(
+                iv, indicators.get("hv_low"), indicators.get("hv_high")
+            )
+            contract_data["IVRank"] = _safe_round(iv_rank)
+            if iv_rank is not None and iv_rank < MIN_IV_RANK:
+                failed.append(f"IVRank >= {MIN_IV_RANK:.0%}")
+                contract_data["Status"] = (
+                    "NEAR" if len(failed) == 1 else contract_data["Status"]
+                )
+                contract_data["Failed Criterion"] = (
+                    failed[0]
+                    if len(failed) == 1
+                    else contract_data.get("Failed Criterion", "")
+                )
+        else:
+            contract_data["IVRank"] = None
+
         if len(failed) == 0:
             passed_contracts.append(contract_data)
         elif len(failed) == 1:
@@ -985,7 +1138,9 @@ def main():
         f"yield>={TARGET_MONTHLY_YIELD_PCT:.2f}%/mo, "
         f"DTE={MIN_DTE}-{MAX_DTE}, "
         f"|delta|={MIN_ABS_DELTA:.2f}-{MAX_ABS_DELTA:.2f}, "
-        f"spread<={MAX_SPREAD_PCT:.2f}%"
+        f"spread<={MAX_SPREAD_PCT:.2f}%, "
+        f"ivRank>={MIN_IV_RANK:.0%}, "
+        f"filterDowntrends={FILTER_DOWNTRENDS}"
     )
 
     print(f"Phase 1: Screening {len(tickers)} tickers for price < ${PRICE_LIMIT}...")
@@ -1024,10 +1179,15 @@ def main():
             "SpreadPct",
             "Delta",
             "ImpliedVolatility",
+            "IVRank",
+            "RSI",
+            "ADX",
+            "DiffPct",
             "Score",
             "Failed Criterion",
         ]
-        print(df[cols].to_string(index=False))
+        available_cols = [c for c in cols if c in df.columns]
+        print(df[available_cols].to_string(index=False))
     else:
         print("\nNo stocks matched the criteria or were near misses.")
 

@@ -14,33 +14,84 @@
             color: white !important;
             border: 1px solid #3b82f6 !important;
         }
+        #tableToolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+            flex-wrap: wrap;
+            margin-bottom: 0.75rem;
+        }
+        #tableToolbar .dataTables_length,
+        #tableToolbar .dataTables_filter {
+            float: none !important;
+            margin: 0;
+            padding: 0;
+        }
+        #tableToolbar .dataTables_filter {
+            margin-left: auto;
+            text-align: right;
+        }
         table.dataTable thead th {
             border-bottom: 2px solid #e5e7eb !important;
         }
         table.dataTable {
             border-collapse: collapse;
         }
+        #resultsTable {
+            --symbol-col-width: 130px;
+        }
         #resultsTable thead th {
             position: sticky;
             top: 0;
             z-index: 1;
             background: #f9fafb;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        #resultsTable th:nth-child(1),
+        #resultsTable td:nth-child(1) {
+            position: sticky;
+            left: 0;
+            min-width: var(--symbol-col-width);
+            width: var(--symbol-col-width);
+            max-width: var(--symbol-col-width);
+            background: #ffffff;
+        }
+        #resultsTable th:nth-child(2),
+        #resultsTable td:nth-child(2) {
+            position: sticky;
+            left: var(--symbol-col-width);
+            min-width: 240px;
+            background: #ffffff;
+        }
+        #resultsTable thead th:nth-child(1),
+        #resultsTable thead th:nth-child(2) {
+            background: #f9fafb;
+            z-index: 4;
+        }
+        #resultsTable tbody td:nth-child(1),
+        #resultsTable tbody td:nth-child(2) {
+            z-index: 2;
+        }
+        #resultsTable th:nth-child(2),
+        #resultsTable td:nth-child(2) {
+            box-shadow: 1px 0 0 #e5e7eb;
         }
     </style>
 </head>
-<body class="bg-gray-50 p-4 md:p-8">
+<body class="bg-gray-50 p-2 md:p-4">
     <div class="max-w-7xl mx-auto">
-        <header class="mb-8">
-            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight">Options Wheel Candidate Dashboard</h1>
-            <p id="last-updated" class="text-gray-500 mt-2">Loading data...</p>
+        <header class="mb-3">
+            <h1 class="text-lg font-semibold text-gray-900 tracking-tight">Options Wheel Candidate Dashboard</h1>
+            <p id="last-updated" class="text-gray-500 text-sm mt-1">Loading data...</p>
         </header>
         
         <!-- Summary Cards -->
-        <div id="summary" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-pulse h-24"></div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-pulse h-24"></div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-pulse h-24"></div>
-            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 animate-pulse h-24"></div>
+        <div id="summary" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+            <div class="bg-white p-2 rounded-xl shadow-sm border border-gray-100 animate-pulse h-14"></div>
+            <div class="bg-white p-2 rounded-xl shadow-sm border border-gray-100 animate-pulse h-14"></div>
+            <div class="bg-white p-2 rounded-xl shadow-sm border border-gray-100 animate-pulse h-14"></div>
+            <div class="bg-white p-2 rounded-xl shadow-sm border border-gray-100 animate-pulse h-14"></div>
         </div>
 
         <!-- Main Table -->
@@ -71,7 +122,8 @@
                     <span id="activeFilterCount" class="text-gray-500 px-2">No filters</span>
                 </div>
             </div>
-            <div class="overflow-x-auto">
+            <div id="tableToolbar"></div>
+            <div class="overflow-x-auto max-h-[70vh] overflow-y-auto">
             <table id="resultsTable" class="display w-full text-sm">
                 <thead>
                     <tr class="text-left bg-gray-50">
@@ -90,6 +142,10 @@
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Option delta, indicating probability-like sensitivity to price moves.">Delta</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Bid-ask spread as a percentage of option price (lower is better).">Spread%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Open interest (number of open option contracts).">OI</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="IV Rank: how current implied volatility compares to historical range (0-1). Higher = IV is elevated = better for selling.">IVRank</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="RSI(14): Relative Strength Index. Below 30 = oversold, above 70 = overbought.">RSI</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="ADX(14): Average Directional Index. Above 25 = strong trend.">ADX</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Price distance from EMA50 in percent. Negative = below EMA50.">Diff%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Composite ranking score: yield + OTM distance + liquidity (OI/volume) + spread quality + DTE fit + IV. Higher is better.">Score</th>
                     </tr>
                 </thead>
@@ -99,10 +155,7 @@
             </table>
             </div>
         </div>
-        
-        <footer class="mt-8 text-center text-gray-400 text-xs">
-            Generated by OptionsWheel Strategy Analyzer
-        </footer>
+
     </div>
 
     <script>
@@ -163,17 +216,16 @@
                         { label: 'Near Misses', value: data.near_misses, color: 'amber' }
                     ];
                     const cardColorClass = {
-                        blue: 'bg-blue-500',
-                        indigo: 'bg-indigo-500',
-                        green: 'bg-green-500',
-                        amber: 'bg-amber-500'
+                        blue: 'text-blue-500',
+                        indigo: 'text-indigo-500',
+                        green: 'text-green-500',
+                        amber: 'text-amber-500'
                     };
                     
                     summaryDiv.innerHTML = cards.map(card => `
-                        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                            <p class="text-gray-400 text-xs font-bold uppercase tracking-wider">${card.label}</p>
-                            <p class="text-3xl font-black text-gray-800 mt-1">${card.value.toLocaleString()}</p>
-                            <div class="h-1 w-12 ${cardColorClass[card.color] || 'bg-gray-400'} mt-3 rounded-full"></div>
+                        <div class="bg-white p-2.5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                            <p class="text-xs font-bold uppercase tracking-wider ${cardColorClass[card.color] || 'text-gray-400'}">${card.label}</p>
+                            <p class="text-xl font-black text-gray-800 mt-0.5">${card.value.toLocaleString()}</p>
                         </div>
                     `).join('');
 
@@ -290,6 +342,10 @@
                                 <td class="px-4 py-4 font-mono ${deltaClass} text-right">${r.Delta != null ? r.Delta.toFixed(3) : 'N/A'}</td>
                                 <td class="px-4 py-4 font-mono ${spreadClass} text-right">${formatPct(r.SpreadPct)}</td>
                                 <td class="px-4 py-4 text-gray-600 text-right">${r.OpenInterest != null ? r.OpenInterest : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-right ${r.IVRank != null && r.IVRank >= 0.5 ? 'text-emerald-600' : r.IVRank != null && r.IVRank >= 0.3 ? 'text-amber-600' : r.IVRank != null ? 'text-red-600' : 'text-gray-500'}">${r.IVRank != null ? r.IVRank.toFixed(2) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-right ${r.RSI != null && r.RSI < 35 ? 'text-red-600' : r.RSI != null && r.RSI > 65 ? 'text-amber-600' : 'text-gray-600'}">${r.RSI != null ? r.RSI.toFixed(1) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-right ${r.ADX != null && r.ADX > 25 ? 'text-amber-600 font-semibold' : 'text-gray-600'}">${r.ADX != null ? r.ADX.toFixed(1) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-right ${r.DiffPct != null && r.DiffPct < -5 ? 'text-red-600' : r.DiffPct != null && r.DiffPct > 5 ? 'text-emerald-600' : 'text-gray-600'}">${r.DiffPct != null ? r.DiffPct.toFixed(1) + '%' : 'N/A'}</td>
                                 <td class="px-4 py-4 font-mono font-semibold ${scoreClass} text-right">${r.Score != null ? r.Score.toFixed(2) : 'N/A'}</td>
                             </tr>
                         `;
@@ -297,8 +353,9 @@
 
                     // Initialize DataTable
                     const table = $('#resultsTable').DataTable({
-                        pageLength: 25,
-                        order: [[2, 'asc'], [15, 'desc'], [10, 'desc']],
+                        lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+                        pageLength: -1,
+                        order: [[2, 'asc'], [19, 'desc'], [10, 'desc']],
                         responsive: true,
                         language: {
                             searchPlaceholder: "Search tickers...",
@@ -307,7 +364,15 @@
                     });
                     
                     // Style the search box
-                    $('.dataTables_filter input').addClass('bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4');
+                    $('.dataTables_filter input').addClass('bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500');
+
+                    const tableToolbar = document.getElementById('tableToolbar');
+                    const dataTableWrapper = document.getElementById('resultsTable_wrapper');
+                    const dataTableLength = dataTableWrapper.querySelector('.dataTables_length');
+                    const dataTableFilter = dataTableWrapper.querySelector('.dataTables_filter');
+
+                    tableToolbar.appendChild(dataTableLength);
+                    tableToolbar.appendChild(dataTableFilter);
 
                     // Quick filters
                     const passOnlyInput = document.getElementById('filterPassOnly');
@@ -351,7 +416,7 @@
                         const minOi = minOiInput.value === '' ? null : Number(minOiInput.value);
 
                         const statusText = (rowData[2] || '').toUpperCase();
-                        const scoreText = (rowData[15] || '').replace('%', '').trim();
+                        const scoreText = (rowData[19] || '').replace('%', '').trim();
                         const oiText = (rowData[14] || '').replace(/,/g, '').trim();
 
                         const scoreValue = scoreText === 'N/A' ? null : Number(scoreText);

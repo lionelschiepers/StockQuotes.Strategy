@@ -38,13 +38,14 @@ class NumpyEncoder(json.JSONEncoder):
 # Configuration
 BATCH_SIZE = 50
 HIST_DAYS = 120
-# BASE_URL = "http://localhost:7071/api/yahoo-finance"
-# HIST_URL = "http://localhost:7071/api/yahoo-finance-historical"
-BASE_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance"
-HIST_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical"
-OPTIONS_URL = (
-    "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options"
-)
+BASE_URL = "http://localhost:7071/api/yahoo-finance"
+HIST_URL = "http://localhost:7071/api/yahoo-finance-historical"
+OPTIONS_URL = "http://localhost:7071/api/yahoo-finance-stock-options"
+# BASE_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance"
+# HIST_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical"
+# OPTIONS_URL = (
+#    "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options"
+# )
 SLEEP_TIME = 0.0
 MAX_WORKERS = 4
 REQUEST_TIMEOUT = 15
@@ -236,6 +237,7 @@ _error_stats = {
     "empty_contract_sets": 0,
     "symbol_analysis_exceptions": 0,
     "contracts_excluded_earnings": 0,
+    "contracts_excluded_missing_spread": 0,
 }
 
 
@@ -326,6 +328,10 @@ def print_error_summary():
         ("Symbols with empty payload", stats["empty_payloads"]),
         ("Symbols with no contracts", stats["empty_contract_sets"]),
         ("Contracts excluded for earnings", stats["contracts_excluded_earnings"]),
+        (
+            "Contracts excluded for missing spread",
+            stats["contracts_excluded_missing_spread"],
+        ),
         ("Worker analysis exceptions", stats["symbol_analysis_exceptions"]),
     ]
     non_zero_items = [(label, count) for label, count in ordered_items if count > 0]
@@ -741,6 +747,10 @@ def _evaluate_put_contract(symbol_data, expiration_dt, option, now_dt):
         premium = last_price
 
     if premium is None or premium <= 0:
+        return None
+
+    if spread_pct is None:
+        _bump_error_stat("contracts_excluded_missing_spread")
         return None
 
     expiration = expiration_dt or _parse_expiration(option.get("expiration"))

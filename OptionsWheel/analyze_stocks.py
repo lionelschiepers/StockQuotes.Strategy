@@ -56,7 +56,7 @@ DEBUG = False
 
 # Caching
 CACHE_DIR = os.environ.get("OPTIONS_CACHE_DIR", ".cache")
-CACHE_TTL_SECONDS = float(os.environ.get("OPTIONS_CACHE_TTL", 14400))  # 4 hours default
+CACHE_TTL_SECONDS = float(os.environ.get("OPTIONS_CACHE_TTL", 3600))  # 1 hours default
 
 
 def _get_cache_path(url):

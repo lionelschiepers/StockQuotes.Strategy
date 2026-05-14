@@ -38,14 +38,14 @@ class NumpyEncoder(json.JSONEncoder):
 # Configuration
 BATCH_SIZE = 50
 HIST_DAYS = 120
-BASE_URL = "http://localhost:7071/api/yahoo-finance"
-HIST_URL = "http://localhost:7071/api/yahoo-finance-historical"
-OPTIONS_URL = "http://localhost:7071/api/yahoo-finance-stock-options"
-# BASE_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance"
-# HIST_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical"
-# OPTIONS_URL = (
-#    "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options"
-# )
+#BASE_URL = "http://localhost:7071/api/yahoo-finance"
+#HIST_URL = "http://localhost:7071/api/yahoo-finance-historical"
+#OPTIONS_URL = "http://localhost:7071/api/yahoo-finance-stock-options"
+BASE_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance"
+HIST_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical"
+OPTIONS_URL = (
+   "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options"
+)
 SLEEP_TIME = 0.0
 MAX_WORKERS = 4
 REQUEST_TIMEOUT = 15
@@ -54,8 +54,47 @@ OPTIONS_REQUEST_TIMEOUT = 25
 OPTIONS_MAX_RETRIES = 3
 DEBUG = False
 
+# Caching
+CACHE_DIR = os.environ.get("OPTIONS_CACHE_DIR", ".cache")
+CACHE_TTL_SECONDS = float(os.environ.get("OPTIONS_CACHE_TTL", 14400))  # 4 hours default
+
+
+def _get_cache_path(url):
+    import hashlib
+
+    safe = hashlib.sha256(url.encode("utf-8")).hexdigest()[:32]
+    return os.path.join(CACHE_DIR, f"{safe}.json")
+
+
+def _read_cache(url):
+    if CACHE_TTL_SECONDS <= 0:
+        return None
+    path = _get_cache_path(url)
+    try:
+        if not os.path.exists(path):
+            return None
+        mtime = os.path.getmtime(path)
+        if time.time() - mtime > CACHE_TTL_SECONDS:
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _write_cache(url, data):
+    if CACHE_TTL_SECONDS <= 0:
+        return
+    try:
+        os.makedirs(CACHE_DIR, exist_ok=True)
+        path = _get_cache_path(url)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
 DEFAULT_SCREENING_CONFIG = {
-    "MAX_PRICE": 80.0,
+    "MAX_PRICE": 120.0,
     "MIN_STOCK_AVG_VOLUME": 500000,
     "MIN_MARKET_CAP": 500000000,
     "EXCLUDE_EARNINGS_BEFORE_EXPIRY": True,
@@ -356,6 +395,11 @@ def print_error_summary():
 
 
 def safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES):
+    cached = _read_cache(url)
+    if cached is not None:
+        debug_log(f"CACHE HIT: {url}")
+        return cached
+
     last_error = None
     for attempt in range(max_retries):
         debug_log(f"GET attempt {attempt + 1}/{max_retries}: {url}")
@@ -405,7 +449,9 @@ def safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES):
 
             response.raise_for_status()
             _on_success()
-            return response.json()
+            data = response.json()
+            _write_cache(url, data)
+            return data
         except requests.RequestException as e:
             _bump_error_stat("request_exceptions")
             last_error = str(e)
@@ -441,7 +487,6 @@ def batch_price_filter(tickers):
         if data:
             for item in data:
                 price = item.get("regularMarketPrice")
-                pe = item.get("trailingPE")
                 avg_volume_3m = int(
                     _to_float(item.get("averageDailyVolume3Month")) or 0
                 )
@@ -450,8 +495,6 @@ def batch_price_filter(tickers):
                 if (
                     price is not None
                     and price < PRICE_LIMIT
-                    and pe is not None
-                    and pe <= 100
                     and avg_volume_3m >= MIN_STOCK_AVG_VOLUME
                     and market_cap >= MIN_MARKET_CAP
                 ):
@@ -484,7 +527,10 @@ def calculate_rsi(series, period=14):
     avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
 
     rs = avg_gain / avg_loss
-    return 100 - (100 / (1 + rs))
+    rsi = 100 - (100 / (1 + rs))
+    # Handle division by zero: if avg_loss is 0, RSI should be 100
+    rsi = rsi.where(avg_loss != 0, 100)
+    return rsi
 
 
 def calculate_adx(df, period=14):
@@ -508,10 +554,16 @@ def calculate_adx(df, period=14):
     )
 
     atr = df["tr"].ewm(alpha=1 / period, adjust=False).mean()
-    plus_di = 100 * (df["plus_dm"].ewm(alpha=1 / period, adjust=False).mean() / atr)
-    minus_di = 100 * (df["minus_dm"].ewm(alpha=1 / period, adjust=False).mean() / atr)
+    # Avoid division by zero: if atr is 0, DI values should be 0
+    plus_di_raw = df["plus_dm"].ewm(alpha=1 / period, adjust=False).mean()
+    minus_di_raw = df["minus_dm"].ewm(alpha=1 / period, adjust=False).mean()
+    plus_di = 100 * (plus_di_raw / atr.replace(0, np.nan))
+    minus_di = 100 * (minus_di_raw / atr.replace(0, np.nan))
+    plus_di = plus_di.fillna(0)
+    minus_di = minus_di.fillna(0)
 
-    dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di)
+    dx = 100 * abs(plus_di - minus_di) / (plus_di + minus_di).replace(0, np.nan)
+    dx = dx.fillna(0)
     adx = dx.ewm(alpha=1 / period, adjust=False).mean()
     return adx
 
@@ -608,8 +660,12 @@ def fetch_historical_indicators(symbol):
     }
 
 
-def compute_iv_rank(option_iv, hv_low, hv_high):
-    """Compute IV rank: how current option IV compares to historical volatility range."""
+def compute_iv_hv_percentile(option_iv, hv_low, hv_high):
+    """Compute IV/HV percentile: how current option IV compares to the stock's historical volatility range.
+
+    Note: this is NOT true IV Rank (which compares current IV to its own 52-week high/low).
+    It compares implied volatility to realized historical volatility over the lookback period.
+    """
     if option_iv is None or hv_low is None or hv_high is None:
         return None
     if hv_high <= hv_low:
@@ -716,7 +772,8 @@ def _extract_next_earnings_dt(quote_item, now_dt):
     future_candidates = [dt for dt in candidates if dt >= now_dt]
     if future_candidates:
         return min(future_candidates)
-    return max(candidates)
+    # If all earnings dates are in the past, there is no upcoming earnings known
+    return None
 
 
 def _dte_from_expiration(expiration_dt, now_dt):
@@ -1014,10 +1071,10 @@ def analyze_single_symbol_options(symbol_data):
                 ) * 100
                 contract_data["DiffPct"] = _safe_round(diff_pct)
 
-        # IV Rank filter
+        # IV/HV percentile filter (not true IV Rank)
         iv = contract_data.get("ImpliedVolatility")
         if indicators and iv is not None:
-            iv_rank = compute_iv_rank(
+            iv_rank = compute_iv_hv_percentile(
                 iv, indicators.get("hv_low"), indicators.get("hv_high")
             )
             contract_data["IVRank"] = _safe_round(iv_rank)

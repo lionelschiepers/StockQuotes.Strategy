@@ -3,7 +3,7 @@ import json
 
 
 def display():
-    with open("analysis_results.json") as f:
+    with open("put_results.json") as f:
         data = json.load(f)
 
     results = pd.DataFrame(data["results"])

@@ -782,11 +782,11 @@
             densityComfortableBtn.addEventListener('click', () => applyDensity('comfortable'));
 
             Promise.all([
-                fetch('analysis_results.json'),
+                fetch('put_results.json'),
                 fetch('screening_config.json')
             ])
                 .then(([resultsResponse, configResponse]) => {
-                    if (!resultsResponse.ok) throw new Error('Could not load analysis_results.json');
+                    if (!resultsResponse.ok) throw new Error('Could not load put_results.json');
                     if (!configResponse.ok) throw new Error('Could not load screening_config.json');
                     return Promise.all([resultsResponse.json(), configResponse.json()]);
                 })
@@ -1078,7 +1078,7 @@
                     document.getElementById('summary').innerHTML = `
                         <div class="col-span-full bg-red-50 p-4 border border-red-200 rounded-lg text-red-700">
                             <strong>Error:</strong> Could not load dashboard data.
-                            <p class="text-sm mt-1">Please ensure <code>analysis_results.json</code> and <code>screening_config.json</code> exist and you are viewing this page through a web server (e.g., <code>python -m http.server</code>).</p>
+                            <p class="text-sm mt-1">Please ensure <code>put_results.json</code> and <code>screening_config.json</code> exist and you are viewing this page through a web server (e.g., <code>python -m http.server</code>).</p>
                         </div>
                     `;
                 });

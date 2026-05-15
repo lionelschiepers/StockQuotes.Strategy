@@ -291,7 +291,7 @@ _error_stats = {
 
 
 def get_tickers():
-    with open("tickers.json", "r") as f:
+    with open("put_tickers.json", "r") as f:
         tickers = json.load(f)
     return [
         ticker for ticker in tickers if isinstance(ticker, str) and "." not in ticker

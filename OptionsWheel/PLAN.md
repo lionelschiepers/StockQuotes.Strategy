@@ -45,7 +45,7 @@ Apply the following strict filters to each candidate:
 
 ### Phase 5: Web Reporting
 - **Goal:** Provide a user-friendly, interactive interface to view analysis results.
-- **Method:** Create an `index.html` page that loads `analysis_results.json`.
+- **Method:** Create an `index.html` page that loads `put_results.json`.
 - **Features:**
     - Summary dashboard showing totals (Analyzed, Candidates, Passed, Near Misses).
     - Sortable data table containing all technical indicators.

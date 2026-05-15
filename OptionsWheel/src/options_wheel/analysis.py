@@ -227,8 +227,8 @@ def validate_screening_config(cfg):
     if cfg["MAX_ABS_DELTA"] < cfg["MIN_ABS_DELTA"]:
         errors.append("MAX_ABS_DELTA must be >= MIN_ABS_DELTA.")
 
-    if cfg["MAX_EXPIRATIONS_PER_SYMBOL"] < 1 or cfg["MAX_EXPIRATIONS_PER_SYMBOL"] > 12:
-        errors.append("MAX_EXPIRATIONS_PER_SYMBOL must be in [1, 12].")
+    if cfg["MAX_EXPIRATIONS_PER_SYMBOL"] < 1 or cfg["MAX_EXPIRATIONS_PER_SYMBOL"] > 24:
+        errors.append("MAX_EXPIRATIONS_PER_SYMBOL must be in [1, 24].")
     if cfg["MAX_CONTRACTS_PER_SYMBOL"] < 1 or cfg["MAX_CONTRACTS_PER_SYMBOL"] > 50:
         errors.append("MAX_CONTRACTS_PER_SYMBOL must be in [1, 50].")
     if cfg["OPTIONS_REQUEST_TIMEOUT"] < 3 or cfg["OPTIONS_REQUEST_TIMEOUT"] > 120:

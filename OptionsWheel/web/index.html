@@ -553,6 +553,10 @@
                 <p id="last-updated" class="text-gray-500 text-sm mt-1">Loading data...</p>
             </div>
             <div class="top-controls">
+                <div class="segmented" role="group" aria-label="Option type">
+                    <button id="typePut" type="button" class="active" aria-pressed="true">Sell Put</button>
+                    <button id="typeCall" type="button" aria-pressed="false">Sell Call</button>
+                </div>
                 <button id="themeToggle" type="button" class="toggle-btn">Switch to Light Mode</button>
                 <div class="segmented" role="group" aria-label="Row density">
                     <button id="densityUltra" type="button" aria-pressed="false">Ultra</button>
@@ -638,11 +642,14 @@
         $(document).ready(function() {
             const bodyEl = document.body;
             const themeToggleBtn = document.getElementById('themeToggle');
+            const typePutBtn = document.getElementById('typePut');
+            const typeCallBtn = document.getElementById('typeCall');
             const densityUltraBtn = document.getElementById('densityUltra');
             const densityCompactBtn = document.getElementById('densityCompact');
             const densityComfortableBtn = document.getElementById('densityComfortable');
             const themeStorageKey = 'optionsWheelTheme';
             const densityStorageKey = 'optionsWheelDensity';
+            const optionTypeStorageKey = 'optionsWheelType';
             const columnWidthsStorageKey = 'optionsWheelColumnWidthsPx';
             const columnMinWidthPx = 60;
             const columnMaxWidthPx = 560;
@@ -680,6 +687,25 @@
 
                 if (dataTableInstance) {
                     dataTableInstance.columns.adjust().draw(false);
+                }
+            };
+
+            let currentOptionType = 'put';
+
+            const applyOptionType = optionType => {
+                const safeType = optionType === 'call' ? 'call' : 'put';
+                currentOptionType = safeType;
+                typePutBtn.classList.toggle('active', safeType === 'put');
+                typePutBtn.setAttribute('aria-pressed', safeType === 'put' ? 'true' : 'false');
+                typeCallBtn.classList.toggle('active', safeType === 'call');
+                typeCallBtn.setAttribute('aria-pressed', safeType === 'call' ? 'true' : 'false');
+                localStorage.setItem(optionTypeStorageKey, safeType);
+
+                const titleEl = document.querySelector('header h1');
+                if (titleEl) {
+                    titleEl.textContent = safeType === 'call'
+                        ? 'Sell Call Candidate Dashboard'
+                        : 'Options Wheel Candidate Dashboard';
                 }
             };
 
@@ -767,9 +793,11 @@
 
             const savedTheme = localStorage.getItem(themeStorageKey);
             const savedDensity = localStorage.getItem(densityStorageKey);
+            const savedOptionType = localStorage.getItem(optionTypeStorageKey);
 
             applyTheme(savedTheme || 'dark');
             applyDensity(savedDensity || 'compact');
+            applyOptionType(savedOptionType || 'put');
             applyColumnWidthOverrides();
 
             themeToggleBtn.addEventListener('click', () => {
@@ -781,13 +809,44 @@
             densityCompactBtn.addEventListener('click', () => applyDensity('compact'));
             densityComfortableBtn.addEventListener('click', () => applyDensity('comfortable'));
 
+            typePutBtn.addEventListener('click', () => {
+                if (currentOptionType !== 'put') {
+                    applyOptionType('put');
+                    loadDashboardData();
+                }
+            });
+            typeCallBtn.addEventListener('click', () => {
+                if (currentOptionType !== 'call') {
+                    applyOptionType('call');
+                    loadDashboardData();
+                }
+            });
+
+            const loadDashboardData = () => {
+            const resultsFile = currentOptionType === 'call' ? '../data/output/call_results.json' : '../data/output/put_results.json';
+            const configFile = currentOptionType === 'call' ? '../config/screening_config_calls.json' : '../config/screening_config_puts.json';
+
+            // Reset UI while loading
+            document.getElementById('last-updated').innerText = 'Loading data...';
+            document.getElementById('summary').innerHTML = [1,2,3,4].map(() =>
+                '<div class="bg-white p-2 rounded-xl shadow-sm border border-gray-100 animate-pulse h-14"></div>'
+            ).join('');
+            if (dataTableInstance) {
+                dataTableInstance.destroy();
+                dataTableInstance = null;
+            }
+            document.getElementById('tableBody').innerHTML = '';
+
+            // Clear any previous custom DataTable search filters
+            $.fn.dataTable.ext.search.length = 0;
+
             Promise.all([
-                fetch('put_results.json'),
-                fetch('screening_config.json')
+                fetch(resultsFile),
+                fetch(configFile).catch(() => fetch('../config/screening_config_puts.json'))
             ])
                 .then(([resultsResponse, configResponse]) => {
-                    if (!resultsResponse.ok) throw new Error('Could not load put_results.json');
-                    if (!configResponse.ok) throw new Error('Could not load screening_config.json');
+                    if (!resultsResponse.ok) throw new Error(`Could not load ${resultsFile}`);
+                    if (!configResponse.ok) throw new Error('Could not load config');
                     return Promise.all([resultsResponse.json(), configResponse.json()]);
                 })
                 .then(([data, config]) => {
@@ -1078,10 +1137,14 @@
                     document.getElementById('summary').innerHTML = `
                         <div class="col-span-full bg-red-50 p-4 border border-red-200 rounded-lg text-red-700">
                             <strong>Error:</strong> Could not load dashboard data.
-                            <p class="text-sm mt-1">Please ensure <code>put_results.json</code> and <code>screening_config.json</code> exist and you are viewing this page through a web server (e.g., <code>python -m http.server</code>).</p>
+                            <p class="text-sm mt-1">Please ensure <code>${resultsFile}</code> and the matching config file exist and you are viewing this page through a web server (e.g., <code>python -m http.server</code>).</p>
                         </div>
                     `;
                 });
+            };
+
+            // Initial load
+            loadDashboardData();
         });
     </script>
 </body>

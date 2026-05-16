@@ -543,6 +543,77 @@
         .bg-amber-100 { background-color: var(--warn-bg) !important; }
         .bg-red-100 { background-color: var(--bad-bg) !important; }
         .hover\:bg-gray-50:hover { background-color: var(--bg-muted) !important; }
+
+        /* Delta dual-range slider */
+        .delta-range-wrap {
+            position: relative;
+            width: 180px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+        }
+
+        .delta-range-wrap .range-track {
+            position: absolute;
+            left: 7px;
+            right: 7px;
+            height: 4px;
+            background: var(--line-strong);
+            border-radius: 4px;
+        }
+
+        .delta-range-wrap .range-fill {
+            position: absolute;
+            height: 100%;
+            background: var(--accent);
+            border-radius: 4px;
+        }
+
+        .delta-range-wrap input[type=range] {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            appearance: none;
+            -webkit-appearance: none;
+            background: transparent;
+            pointer-events: none;
+            z-index: 3;
+        }
+
+        .delta-range-wrap input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            pointer-events: all;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            border: 2px solid var(--bg-elevated);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+
+        .delta-range-wrap input[type=range]::-moz-range-thumb {
+            pointer-events: all;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            border: 2px solid var(--bg-elevated);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+        }
+
+        .delta-range-wrap input[type=range]::-webkit-slider-runnable-track {
+            background: transparent;
+        }
+
+        .delta-range-wrap input[type=range]::-moz-range-track {
+            background: transparent;
+            border: none;
+        }
     </style>
 </head>
 <body class="p-2 md:p-4" data-theme="dark" data-density="compact">
@@ -589,12 +660,18 @@
                         PASS only
                     </label>
                     <label class="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700">
-                        Min Score
-                        <input id="filterMinScore" type="number" min="0" max="100" step="1" class="w-20 rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    </label>
-                    <label class="inline-flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-700">
-                        Min OI
-                        <input id="filterMinOi" type="number" min="0" step="1" class="w-24 rounded border border-gray-300 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <span class="whitespace-nowrap">Delta</span>
+                        <div class="flex flex-col gap-1">
+                            <div class="delta-range-wrap">
+                                <div class="range-track"><div id="deltaRangeFill" class="range-fill"></div></div>
+                                <input type="range" id="deltaSliderMin" step="0.01">
+                                <input type="range" id="deltaSliderMax" step="0.01">
+                            </div>
+                            <div class="flex justify-between font-mono text-xs" style="width:180px;color:var(--text-muted)">
+                                <span id="deltaLabelMin">—</span>
+                                <span id="deltaLabelMax">—</span>
+                            </div>
+                        </div>
                     </label>
                     <button id="resetFilters" type="button" class="rounded-md border border-gray-300 bg-white px-3 py-2 text-gray-700 hover:bg-gray-50">
                         Reset filters
@@ -622,7 +699,7 @@
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Option delta, indicating probability-like sensitivity to price moves.">Delta</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Bid-ask spread as a percentage of option price (lower is better).">Spread%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Open interest (number of open option contracts).">OI</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="IV Rank: how current implied volatility compares to historical range (0-1). Higher = IV is elevated = better for selling.">IVRank</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="IV/HV Percentile: how current implied volatility compares to the stock's 52-week realized volatility range (0-1). Higher = IV is elevated relative to recent history = better for selling. Note: this uses historical price volatility, not a true IV rank.">IVHVPct</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="TECHNICALS" title="RSI(14): Relative Strength Index. Below 30 = oversold, above 70 = overbought.">RSI</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="ADX(14): Average Directional Index. Above 25 = strong trend.">ADX</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Price distance from EMA50 in percent. Negative = below EMA50.">Diff%</th>
@@ -1023,7 +1100,7 @@
                                 <td class="px-4 py-4 font-mono ${deltaClass} text-right">${r.Delta != null ? r.Delta.toFixed(3) : 'N/A'}</td>
                                 <td class="px-4 py-4 font-mono ${spreadClass} text-right">${formatPct(r.SpreadPct)}</td>
                                 <td class="px-4 py-4 text-gray-600 text-right">${r.OpenInterest != null ? r.OpenInterest : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-right ${r.IVRank != null && r.IVRank >= 0.5 ? 'text-emerald-600' : r.IVRank != null && r.IVRank >= 0.3 ? 'text-amber-600' : r.IVRank != null ? 'text-red-600' : 'text-gray-500'}">${r.IVRank != null ? r.IVRank.toFixed(2) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-right ${r.IVHVPercentile != null && r.IVHVPercentile >= 0.5 ? 'text-emerald-600' : r.IVHVPercentile != null && r.IVHVPercentile >= 0.3 ? 'text-amber-600' : r.IVHVPercentile != null ? 'text-red-600' : 'text-gray-500'}">${r.IVHVPercentile != null ? r.IVHVPercentile.toFixed(2) : 'N/A'}</td>
                                 <td class="px-4 py-4 font-mono text-right ${r.RSI != null && r.RSI < 35 ? 'text-red-600' : r.RSI != null && r.RSI > 65 ? 'text-amber-600' : 'text-gray-600'}">${r.RSI != null ? r.RSI.toFixed(1) : 'N/A'}</td>
                                 <td class="px-4 py-4 font-mono text-right ${r.ADX != null && r.ADX > 25 ? 'text-amber-600 font-semibold' : 'text-gray-600'}">${r.ADX != null ? r.ADX.toFixed(1) : 'N/A'}</td>
                                 <td class="px-4 py-4 font-mono text-right ${r.DiffPct != null && r.DiffPct < -5 ? 'text-red-600' : r.DiffPct != null && r.DiffPct > 5 ? 'text-emerald-600' : 'text-gray-600'}">${r.DiffPct != null ? r.DiffPct.toFixed(1) + '%' : 'N/A'}</td>
@@ -1057,16 +1134,48 @@
 
                     // Quick filters
                     const passOnlyInput = document.getElementById('filterPassOnly');
-                    const minScoreInput = document.getElementById('filterMinScore');
-                    const minOiInput = document.getElementById('filterMinOi');
+                    const deltaSliderMin = document.getElementById('deltaSliderMin');
+                    const deltaSliderMax = document.getElementById('deltaSliderMax');
+                    const deltaRangeFill = document.getElementById('deltaRangeFill');
+                    const deltaLabelMin = document.getElementById('deltaLabelMin');
+                    const deltaLabelMax = document.getElementById('deltaLabelMax');
                     const resetFiltersBtn = document.getElementById('resetFilters');
                     const activeFilterCount = document.getElementById('activeFilterCount');
 
+                    // Compute delta range from data
+                    const allDeltas = data.results.map(r => r.Delta).filter(d => d != null && !Number.isNaN(Number(d)));
+                    const globalDeltaMin = allDeltas.length > 0 ? Math.min(...allDeltas) : -1;
+                    const globalDeltaMax = allDeltas.length > 0 ? Math.max(...allDeltas) : 0;
+
+                    deltaSliderMin.min = globalDeltaMin.toFixed(3);
+                    deltaSliderMin.max = globalDeltaMax.toFixed(3);
+                    deltaSliderMin.step = '0.01';
+                    deltaSliderMin.value = globalDeltaMin.toFixed(3);
+                    deltaSliderMax.min = globalDeltaMin.toFixed(3);
+                    deltaSliderMax.max = globalDeltaMax.toFixed(3);
+                    deltaSliderMax.step = '0.01';
+                    deltaSliderMax.value = globalDeltaMax.toFixed(3);
+
+                    const updateDeltaFill = () => {
+                        const min = Number(deltaSliderMin.min);
+                        const max = Number(deltaSliderMin.max);
+                        const valMin = Number(deltaSliderMin.value);
+                        const valMax = Number(deltaSliderMax.value);
+                        const range = max - min || 1;
+                        deltaRangeFill.style.left = ((valMin - min) / range * 100) + '%';
+                        deltaRangeFill.style.width = ((valMax - valMin) / range * 100) + '%';
+                        deltaLabelMin.textContent = valMin.toFixed(2);
+                        deltaLabelMax.textContent = valMax.toFixed(2);
+                    };
+
+                    updateDeltaFill();
+
                     const updateActiveFilterCount = () => {
+                        const isDeltaFiltered = Number(deltaSliderMin.value) > globalDeltaMin ||
+                                                Number(deltaSliderMax.value) < globalDeltaMax;
                         const active = [
                             passOnlyInput.checked,
-                            minScoreInput.value !== '',
-                            minOiInput.value !== ''
+                            isDeltaFiltered
                         ].filter(Boolean).length;
 
                         activeFilterCount.innerText = active === 0 ? 'No filters' : `${active} active filter${active > 1 ? 's' : ''}`;
@@ -1093,23 +1202,17 @@
                         }
 
                         const passOnly = passOnlyInput.checked;
-                        const minScore = minScoreInput.value === '' ? null : Number(minScoreInput.value);
-                        const minOi = minOiInput.value === '' ? null : Number(minOiInput.value);
+                        const minDelta = Number(deltaSliderMin.value);
+                        const maxDelta = Number(deltaSliderMax.value);
 
                         const statusText = (rowData[2] || '').toUpperCase();
-                        const scoreText = (rowData[19] || '').replace('%', '').trim();
-                        const oiText = (rowData[14] || '').replace(/,/g, '').trim();
-
-                        const scoreValue = scoreText === 'N/A' ? null : Number(scoreText);
-                        const oiValue = oiText === 'N/A' ? null : Number(oiText);
+                        const deltaText = (rowData[12] || '').trim();
+                        const deltaValue = deltaText === 'N/A' || deltaText === '' ? null : Number(deltaText);
 
                         if (passOnly && !statusText.includes('PASS')) {
                             return false;
                         }
-                        if (minScore != null && (scoreValue == null || Number.isNaN(scoreValue) || scoreValue < minScore)) {
-                            return false;
-                        }
-                        if (minOi != null && (oiValue == null || Number.isNaN(oiValue) || oiValue < minOi)) {
+                        if (deltaValue == null || Number.isNaN(deltaValue) || deltaValue < minDelta || deltaValue > maxDelta) {
                             return false;
                         }
 
@@ -1117,15 +1220,30 @@
                     });
 
                     passOnlyInput.addEventListener('change', redrawTable);
-                    minScoreInput.addEventListener('input', debouncedRedraw);
-                    minOiInput.addEventListener('input', debouncedRedraw);
-                    minScoreInput.addEventListener('change', redrawTable);
-                    minOiInput.addEventListener('change', redrawTable);
+                    deltaSliderMin.addEventListener('pointerdown', () => { deltaSliderMin.style.zIndex = 5; deltaSliderMax.style.zIndex = 3; });
+                    deltaSliderMax.addEventListener('pointerdown', () => { deltaSliderMax.style.zIndex = 5; deltaSliderMin.style.zIndex = 3; });
+                    deltaSliderMin.addEventListener('input', () => {
+                        if (Number(deltaSliderMin.value) > Number(deltaSliderMax.value)) {
+                            deltaSliderMin.value = deltaSliderMax.value;
+                        }
+                        updateDeltaFill();
+                        debouncedRedraw();
+                    });
+                    deltaSliderMax.addEventListener('input', () => {
+                        if (Number(deltaSliderMax.value) < Number(deltaSliderMin.value)) {
+                            deltaSliderMax.value = deltaSliderMin.value;
+                        }
+                        updateDeltaFill();
+                        debouncedRedraw();
+                    });
+                    deltaSliderMin.addEventListener('change', redrawTable);
+                    deltaSliderMax.addEventListener('change', redrawTable);
 
                     resetFiltersBtn.addEventListener('click', () => {
                         passOnlyInput.checked = false;
-                        minScoreInput.value = '';
-                        minOiInput.value = '';
+                        deltaSliderMin.value = deltaSliderMin.min;
+                        deltaSliderMax.value = deltaSliderMax.max;
+                        updateDeltaFill();
                         redrawTable();
                     });
 

@@ -43,7 +43,7 @@ class NumpyEncoder(json.JSONEncoder):
 
 # Configuration
 BATCH_SIZE = 50
-HIST_DAYS = 120
+HIST_DAYS = 365
 #BASE_URL = "http://localhost:7071/api/yahoo-finance"
 #HIST_URL = "http://localhost:7071/api/yahoo-finance-historical"
 #OPTIONS_URL = "http://localhost:7071/api/yahoo-finance-stock-options"
@@ -118,10 +118,17 @@ DEFAULT_SCREENING_CONFIG = {
     "MAX_CONTRACTS_PER_SYMBOL": 3,
     "OPTIONS_REQUEST_TIMEOUT": 25,
     "OPTIONS_MAX_RETRIES": 8,
-    "RISK_FREE_RATE": 0.0,
+    "RISK_FREE_RATE": 0.045,
     "DIVIDEND_YIELD": 0.0,
     "MIN_IV_RANK": 0.0,
     "FILTER_DOWNTRENDS": True,
+    "SCORE_WEIGHT_YIELD": 30,
+    "SCORE_WEIGHT_OTM": 20,
+    "SCORE_WEIGHT_OI": 15,
+    "SCORE_WEIGHT_VOLUME": 10,
+    "SCORE_WEIGHT_SPREAD": 15,
+    "SCORE_WEIGHT_DTE": 10,
+    "SCORE_WEIGHT_IV": 10,
 }
 
 
@@ -249,6 +256,14 @@ def validate_screening_config(cfg):
     if not isinstance(cfg["EXCLUDE_EARNINGS_BEFORE_EXPIRY"], bool):
         errors.append("EXCLUDE_EARNINGS_BEFORE_EXPIRY must be true/false.")
 
+    for weight_key in (
+        "SCORE_WEIGHT_YIELD", "SCORE_WEIGHT_OTM", "SCORE_WEIGHT_OI",
+        "SCORE_WEIGHT_VOLUME", "SCORE_WEIGHT_SPREAD", "SCORE_WEIGHT_DTE",
+        "SCORE_WEIGHT_IV",
+    ):
+        if cfg[weight_key] < 0:
+            errors.append(f"{weight_key} must be >= 0.")
+
     if errors:
         raise ValueError("Invalid screening configuration:\n- " + "\n- ".join(errors))
 
@@ -264,6 +279,8 @@ def init_screening_config(option_type="put"):
     global MAX_EXPIRATIONS_PER_SYMBOL, MAX_CONTRACTS_PER_SYMBOL
     global OPTIONS_REQUEST_TIMEOUT, OPTIONS_MAX_RETRIES
     global RISK_FREE_RATE, DIVIDEND_YIELD, MIN_IV_RANK, FILTER_DOWNTRENDS
+    global SCORE_WEIGHT_YIELD, SCORE_WEIGHT_OTM, SCORE_WEIGHT_OI
+    global SCORE_WEIGHT_VOLUME, SCORE_WEIGHT_SPREAD, SCORE_WEIGHT_DTE, SCORE_WEIGHT_IV
 
     SCREENING_CONFIG = validate_screening_config(
         load_screening_config(DEFAULT_SCREENING_CONFIG, option_type=option_type)
@@ -291,6 +308,13 @@ def init_screening_config(option_type="put"):
     DIVIDEND_YIELD = SCREENING_CONFIG["DIVIDEND_YIELD"]
     MIN_IV_RANK = SCREENING_CONFIG["MIN_IV_RANK"]
     FILTER_DOWNTRENDS = SCREENING_CONFIG["FILTER_DOWNTRENDS"]
+    SCORE_WEIGHT_YIELD = SCREENING_CONFIG["SCORE_WEIGHT_YIELD"]
+    SCORE_WEIGHT_OTM = SCREENING_CONFIG["SCORE_WEIGHT_OTM"]
+    SCORE_WEIGHT_OI = SCREENING_CONFIG["SCORE_WEIGHT_OI"]
+    SCORE_WEIGHT_VOLUME = SCREENING_CONFIG["SCORE_WEIGHT_VOLUME"]
+    SCORE_WEIGHT_SPREAD = SCREENING_CONFIG["SCORE_WEIGHT_SPREAD"]
+    SCORE_WEIGHT_DTE = SCREENING_CONFIG["SCORE_WEIGHT_DTE"]
+    SCORE_WEIGHT_IV = SCREENING_CONFIG["SCORE_WEIGHT_IV"]
 
 
 # Default initialization (for backward compatibility when imported)
@@ -461,7 +485,7 @@ def safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES):
                     f"backoff={backoff:.2f}s; body={_shorten_response_text(response.text)}"
                 )
                 _set_global_cooldown(backoff)
-                last_error = f"HTTP {response.status_code}"
+                last_error = f"HTTP {response.status_code}: {_shorten_response_text(response.text)}"
                 time.sleep(backoff)
                 continue
 
@@ -509,6 +533,7 @@ def batch_price_filter(tickers):
             f"{BASE_URL}?symbols={symbols}&fields="
             "symbol,shortName,regularMarketPrice,trailingPE,"
             "averageDailyVolume3Month,marketCap,"
+            "trailingAnnualDividendYield,fiftyDayAverage,"
             "earningsTimestamp,earningsTimestampStart,earningsTimestampEnd"
         )
         data = safe_get(url)
@@ -519,6 +544,8 @@ def batch_price_filter(tickers):
                     _to_float(item.get("averageDailyVolume3Month")) or 0
                 )
                 market_cap = int(_to_float(item.get("marketCap")) or 0)
+                dividend_yield = _to_float(item.get("trailingAnnualDividendYield")) or 0.0
+                fifty_day_average = _to_float(item.get("fiftyDayAverage"))
                 next_earnings_dt = _extract_next_earnings_dt(item, now_dt)
                 if (
                     price is not None
@@ -533,6 +560,8 @@ def batch_price_filter(tickers):
                             "name": item.get("shortName", ""),
                             "averageDailyVolume3Month": avg_volume_3m,
                             "marketCap": market_cap,
+                            "dividend_yield": dividend_yield,
+                            "fifty_day_average": fifty_day_average,
                             "next_earnings_dt": next_earnings_dt,
                         }
                     )
@@ -969,6 +998,7 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
         return None
 
     if delta is None:
+        per_stock_div_yield = symbol_data.get("dividend_yield", DIVIDEND_YIELD)
         delta = _estimate_delta(
             price,
             strike,
@@ -976,7 +1006,7 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
             expiration,
             now_dt,
             RISK_FREE_RATE,
-            DIVIDEND_YIELD,
+            per_stock_div_yield,
             option_type=option_type,
         )
 
@@ -986,8 +1016,8 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
     else:
         otm_pct = ((price - strike) / price) * 100
 
-    monthly_yield_pct = (premium / strike) * (30 / dte) * 100
-    annualized_yield_pct = monthly_yield_pct * 12
+    annualized_yield_pct = ((1 + premium / strike) ** (365.0 / dte) - 1) * 100
+    monthly_yield_pct = ((1 + premium / strike) ** (30.0 / dte) - 1) * 100
 
     checks = {
         "Yield >= 1%/month": monthly_yield_pct >= TARGET_MONTHLY_YIELD_PCT,
@@ -1008,15 +1038,15 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
 
     failed = [name for name, passed in checks.items() if not passed]
 
-    liquidity_score = min(open_interest / 500, 1.0) * 15 + min(volume / 50, 1.0) * 10
-    yield_score = min(monthly_yield_pct / TARGET_MONTHLY_YIELD_PCT, 2.0) * 30
-    otm_score = min(max(otm_pct, 0) / 10, 1.0) * 20
+    liquidity_score = min(open_interest / 500, 1.0) * SCORE_WEIGHT_OI + min(volume / 50, 1.0) * SCORE_WEIGHT_VOLUME
+    yield_score = min(monthly_yield_pct / TARGET_MONTHLY_YIELD_PCT, 2.0) * SCORE_WEIGHT_YIELD
+    otm_score = min(max(otm_pct, 0) / 10, 1.0) * SCORE_WEIGHT_OTM
     spread_score = 0
     if spread_pct is not None:
-        spread_score = max(0.0, 1.0 - (spread_pct / MAX_SPREAD_PCT)) * 15
+        spread_score = max(0.0, 1.0 - (spread_pct / MAX_SPREAD_PCT)) * SCORE_WEIGHT_SPREAD
     dte_mid = (MIN_DTE + MAX_DTE) / 2
-    dte_score = max(0.0, 1.0 - abs(dte - dte_mid) / dte_mid) * 10
-    iv_score = min(max(implied_volatility or 0, 0), 2.0) / 2.0 * 10
+    dte_score = max(0.0, 1.0 - abs(dte - dte_mid) / dte_mid) * SCORE_WEIGHT_DTE
+    iv_score = min(max(implied_volatility or 0, 0), 2.0) / 2.0 * SCORE_WEIGHT_IV
     score = (
         yield_score + otm_score + liquidity_score + spread_score + dte_score + iv_score
     )
@@ -1058,14 +1088,21 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
 
 def analyze_single_symbol_options(symbol_data, option_type="put"):
     symbol = symbol_data["symbol"]
+    price = symbol_data.get("price") or 0.0
+    fifty_day_avg = symbol_data.get("fifty_day_average")
 
-    # Fetch historical indicators for trend/IV analysis
-    indicators = fetch_historical_indicators(symbol)
-
-    # Filter out strong downtrends (only for puts)
-    if option_type == "put" and FILTER_DOWNTRENDS and is_downtrend(indicators):
-        debug_log(f"Skipping {symbol}: strong downtrend detected")
-        return [], []
+    # Fetch history upfront only when a downtrend pre-check is needed:
+    # puts + FILTER_DOWNTRENDS=True + price is potentially below EMA50.
+    # If price >= 95% of the 50-day SMA the stock cannot be flagged as a
+    # downtrend (below_ema is a prerequisite for every signal), so we defer
+    # the history fetch until after the options chain is evaluated.
+    indicators = None
+    if option_type == "put" and FILTER_DOWNTRENDS:
+        if fifty_day_avg is None or price < fifty_day_avg * 0.95:
+            indicators = fetch_historical_indicators(symbol)
+            if is_downtrend(indicators):
+                debug_log(f"Skipping {symbol}: strong downtrend detected")
+                return [], []
 
     api_filter = "calls" if option_type == "call" else "puts"
     url = (
@@ -1087,17 +1124,29 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
     if len(contracts) == 0:
         _bump_error_stat("empty_contract_sets")
         debug_log(f"No {option_type} contracts extracted for {symbol}")
-    passed_contracts = []
-    near_contracts = []
 
+    # First pass: evaluate contracts without indicator enrichment.
+    # Only keep potential PASS (0 failures) or NEAR (1 failure) candidates.
+    pre_evaluated = []
     for expiration_dt, option in contracts:
         evaluated = _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type=option_type)
         if not evaluated:
             continue
-
         contract_data, failed = evaluated
+        if len(failed) <= 1:
+            pre_evaluated.append((contract_data, list(failed)))
 
-        # Enrich with technical indicators
+    if not pre_evaluated:
+        return [], []
+
+    # Lazy history fetch: only triggered when surviving contracts exist.
+    if indicators is None:
+        indicators = fetch_historical_indicators(symbol)
+
+    # Second pass: enrich with technical indicators + IV/HV percentile filter.
+    passed_contracts = []
+    near_contracts = []
+    for contract_data, failed in pre_evaluated:
         if indicators:
             contract_data["EMA50"] = _safe_round(indicators.get("ema50"))
             contract_data["ADX"] = _safe_round(indicators.get("adx"))
@@ -1111,15 +1160,14 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
                 ) * 100
                 contract_data["DiffPct"] = _safe_round(diff_pct)
 
-        # IV/HV percentile filter (not true IV Rank)
         iv = contract_data.get("ImpliedVolatility")
         if indicators and iv is not None:
             iv_rank = compute_iv_hv_percentile(
                 iv, indicators.get("hv_low"), indicators.get("hv_high")
             )
-            contract_data["IVRank"] = _safe_round(iv_rank)
+            contract_data["IVHVPercentile"] = _safe_round(iv_rank)
             if iv_rank is not None and iv_rank < MIN_IV_RANK:
-                failed.append(f"IVRank >= {MIN_IV_RANK:.0%}")
+                failed.append(f"IVHVPercentile >= {MIN_IV_RANK:.0%}")
                 contract_data["Status"] = (
                     "NEAR" if len(failed) == 1 else contract_data["Status"]
                 )
@@ -1129,7 +1177,7 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
                     else contract_data.get("Failed Criterion", "")
                 )
         else:
-            contract_data["IVRank"] = None
+            contract_data["IVHVPercentile"] = None
 
         if len(failed) == 0:
             passed_contracts.append(contract_data)
@@ -1249,7 +1297,7 @@ def main():
         f"DTE={MIN_DTE}-{MAX_DTE}, "
         f"|delta|={MIN_ABS_DELTA:.2f}-{MAX_ABS_DELTA:.2f}, "
         f"spread<={MAX_SPREAD_PCT:.2f}%, "
-        f"ivRank>={MIN_IV_RANK:.0%}, "
+        f"ivHVPercentile>={MIN_IV_RANK:.0%}, "
         f"filterDowntrends={FILTER_DOWNTRENDS}"
     )
 
@@ -1289,7 +1337,7 @@ def main():
             "SpreadPct",
             "Delta",
             "ImpliedVolatility",
-            "IVRank",
+            "IVHVPercentile",
             "RSI",
             "ADX",
             "DiffPct",

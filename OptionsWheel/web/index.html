@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
     <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.css">
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.js"></script>
@@ -901,7 +902,7 @@
 
             const loadDashboardData = () => {
             const resultsFile = currentOptionType === 'call' ? '../data/output/call_results.json' : '../data/output/put_results.json';
-            const configFile = currentOptionType === 'call' ? '../config/screening_config_calls.json' : '../config/screening_config_puts.json';
+            const configFile = currentOptionType === 'call' ? '../config/screening_config_calls.yaml' : '../config/screening_config_puts.yaml';
 
             // Reset UI while loading
             document.getElementById('last-updated').innerText = 'Loading data...';
@@ -919,12 +920,12 @@
 
             Promise.all([
                 fetch(resultsFile),
-                fetch(configFile).catch(() => fetch('../config/screening_config_puts.json'))
+                fetch(configFile).catch(() => fetch('../config/screening_config_puts.yaml'))
             ])
                 .then(([resultsResponse, configResponse]) => {
                     if (!resultsResponse.ok) throw new Error(`Could not load ${resultsFile}`);
                     if (!configResponse.ok) throw new Error('Could not load config');
-                    return Promise.all([resultsResponse.json(), configResponse.json()]);
+                    return Promise.all([resultsResponse.json(), configResponse.text().then(t => jsyaml.load(t))]);
                 })
                 .then(([data, config]) => {
                     const escapeHtml = value => String(value).replace(/[&<>'"]/g, char => ({

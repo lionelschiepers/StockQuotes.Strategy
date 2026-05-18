@@ -5,6 +5,7 @@ import numpy as np
 from datetime import datetime, timedelta, timezone
 import time
 import json
+import yaml
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import math
@@ -158,8 +159,8 @@ def _shorten_response_text(text, max_len=240):
 
 def load_screening_config(defaults, option_type="put"):
     cfg = dict(defaults)
-    default_calls_config = os.path.join(CONFIG_DIR, "screening_config_calls.json")
-    default_puts_config = os.path.join(CONFIG_DIR, "screening_config_puts.json")
+    default_calls_config = os.path.join(CONFIG_DIR, "screening_config_calls.yaml")
+    default_puts_config = os.path.join(CONFIG_DIR, "screening_config_puts.yaml")
     if option_type == "call":
         config_path = os.environ.get("OPTIONS_SCREEN_CONFIG_CALLS", default_calls_config)
         if not os.path.exists(config_path):
@@ -170,7 +171,7 @@ def load_screening_config(defaults, option_type="put"):
     if os.path.exists(config_path):
         try:
             with open(config_path, "r") as f:
-                file_cfg = json.load(f)
+                file_cfg = yaml.safe_load(f)
             if isinstance(file_cfg, dict):
                 for key, value in file_cfg.items():
                     if key in cfg:

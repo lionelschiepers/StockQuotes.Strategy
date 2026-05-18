@@ -1,0 +1,109 @@
+# ── Stock filters ──────────────────────────────────────────────────────────────
+
+# Maximum stock price to consider (avoids high-priced stocks where cash-secured
+# put collateral requirements would be too large for small accounts)
+MAX_PRICE: 120.0
+
+# Minimum average daily trading volume for the underlying stock
+MIN_STOCK_AVG_VOLUME: 500000
+
+# Minimum market capitalisation in USD (filters out micro-caps)
+MIN_MARKET_CAP: 500000000
+
+# If true, skip any contract whose expiry falls after the next earnings date
+EXCLUDE_EARNINGS_BEFORE_EXPIRY: false
+
+# ── Premium / yield targets ────────────────────────────────────────────────────
+
+# Minimum annualised monthly yield expected from the premium (%)
+TARGET_MONTHLY_YIELD_PCT: 1.5
+
+# Minimum option premium in USD per contract (filters illiquid / penny options)
+MIN_PREMIUM: 0.2
+
+# ── Delta / moneyness filters ──────────────────────────────────────────────────
+
+# Minimum absolute delta (0.0 = no lower bound)
+MIN_ABS_DELTA: 0.0
+
+# Maximum absolute delta — for cash-secured puts, keep well below 0.5 (OTM)
+MAX_ABS_DELTA: 0.10
+
+# ── Days-to-expiry (DTE) window ────────────────────────────────────────────────
+
+# Minimum days to expiry; avoids gamma risk too close to expiration
+MIN_DTE: 7
+
+# Maximum days to expiry; beyond this theta decay is too slow
+MAX_DTE: 60
+
+# ── Strike distance ────────────────────────────────────────────────────────────
+
+# Minimum percentage the strike must be Out-of-The-Money
+MIN_OTM_PCT: 5.0
+
+# ── Liquidity filters ─────────────────────────────────────────────────────────
+
+# Minimum open interest on the contract
+MIN_OPEN_INTEREST: 100
+
+# Minimum daily volume on the contract
+MIN_VOLUME: 5
+
+# Maximum bid/ask spread as a percentage of the mid-price
+MAX_SPREAD_PCT: 20.0
+
+# ── Result set limits ──────────────────────────────────────────────────────────
+
+# Maximum number of expiration dates to evaluate per symbol
+MAX_EXPIRATIONS_PER_SYMBOL: 10
+
+# Maximum number of contracts to return per symbol (best scores only)
+MAX_CONTRACTS_PER_SYMBOL: 3
+
+# ── API / network settings ─────────────────────────────────────────────────────
+
+# Timeout in seconds for each options-chain API request
+OPTIONS_REQUEST_TIMEOUT: 25
+
+# Number of times to retry a failed API request before giving up
+OPTIONS_MAX_RETRIES: 3
+
+# ── Pricing model ──────────────────────────────────────────────────────────────
+
+# Risk-free rate used in Black-Scholes (e.g. 0.045 = 4.5%)
+RISK_FREE_RATE: 0.045
+
+# ── Volatility filter ─────────────────────────────────────────────────────────
+
+# Minimum IV Rank (0–1); filters out low-volatility environments where premium
+# collection is unattractive
+MIN_IV_RANK: 0.3
+
+# ── Trend filter ──────────────────────────────────────────────────────────────
+
+# If true, skip stocks in a confirmed downtrend (price below key moving averages)
+FILTER_DOWNTRENDS: true
+
+# ── Scoring weights (must roughly sum to 100) ─────────────────────────────────
+
+# Weight given to the yield component of the composite score
+SCORE_WEIGHT_YIELD: 30
+
+# Weight given to the OTM distance component (more OTM = less assignment risk)
+SCORE_WEIGHT_OTM: 20
+
+# Weight given to open interest (proxy for liquidity depth)
+SCORE_WEIGHT_OI: 15
+
+# Weight given to daily volume
+SCORE_WEIGHT_VOLUME: 10
+
+# Weight given to bid/ask spread tightness
+SCORE_WEIGHT_SPREAD: 15
+
+# Weight given to DTE (rewards contracts in the sweet-spot theta-decay window)
+SCORE_WEIGHT_DTE: 10
+
+# Weight given to implied volatility rank
+SCORE_WEIGHT_IV: 10

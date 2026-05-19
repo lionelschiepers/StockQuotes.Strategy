@@ -48,11 +48,15 @@ HIST_DAYS = 365
 #BASE_URL = "http://localhost:7071/api/yahoo-finance"
 #HIST_URL = "http://localhost:7071/api/yahoo-finance-historical"
 #OPTIONS_URL = "http://localhost:7071/api/yahoo-finance-stock-options"
-BASE_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance"
-HIST_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical"
-OPTIONS_URL = (
-   "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options"
-)
+
+#BASE_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance"
+#HIST_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical"
+#OPTIONS_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options"
+
+BASE_URL = "https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api/yahoo-finance"
+HIST_URL = "https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api/yahoo-finance-historical"
+OPTIONS_URL = "https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api/yahoo-finance-stock-options"
+
 SLEEP_TIME = 0.0
 MAX_WORKERS = 4
 REQUEST_TIMEOUT = 15

@@ -1134,7 +1134,8 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
         if not evaluated:
             continue
         contract_data, failed = evaluated
-        if len(failed) <= 1:
+        spread_key = f"Spread <= {MAX_SPREAD_PCT}%"
+        if len(failed) <= 1 and spread_key not in failed:
             pre_evaluated.append((contract_data, list(failed)))
 
     if not pre_evaluated:

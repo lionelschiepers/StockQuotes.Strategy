@@ -127,6 +127,7 @@ DEFAULT_SCREENING_CONFIG = {
     "DIVIDEND_YIELD": 0.0,
     "MIN_IV_RANK": 0.0,
     "FILTER_DOWNTRENDS": True,
+    "FILTER_UPTRENDS": True,
     "SCORE_WEIGHT_YIELD": 30,
     "SCORE_WEIGHT_OTM": 20,
     "SCORE_WEIGHT_OI": 15,
@@ -258,6 +259,11 @@ def validate_screening_config(cfg):
     if not isinstance(cfg["FILTER_DOWNTRENDS"], bool):
         errors.append("FILTER_DOWNTRENDS must be true/false.")
 
+    if "FILTER_UPTRENDS" not in cfg:
+        cfg["FILTER_UPTRENDS"] = True
+    if not isinstance(cfg["FILTER_UPTRENDS"], bool):
+        errors.append("FILTER_UPTRENDS must be true/false.")
+
     if not isinstance(cfg["EXCLUDE_EARNINGS_BEFORE_EXPIRY"], bool):
         errors.append("EXCLUDE_EARNINGS_BEFORE_EXPIRY must be true/false.")
 
@@ -283,7 +289,7 @@ def init_screening_config(option_type="put"):
     global MIN_OPEN_INTEREST, MIN_VOLUME, MAX_SPREAD_PCT, MIN_ABS_DELTA, MAX_ABS_DELTA
     global MAX_EXPIRATIONS_PER_SYMBOL, MAX_CONTRACTS_PER_SYMBOL
     global OPTIONS_REQUEST_TIMEOUT, OPTIONS_MAX_RETRIES
-    global RISK_FREE_RATE, DIVIDEND_YIELD, MIN_IV_RANK, FILTER_DOWNTRENDS
+    global RISK_FREE_RATE, DIVIDEND_YIELD, MIN_IV_RANK, FILTER_DOWNTRENDS, FILTER_UPTRENDS
     global SCORE_WEIGHT_YIELD, SCORE_WEIGHT_OTM, SCORE_WEIGHT_OI
     global SCORE_WEIGHT_VOLUME, SCORE_WEIGHT_SPREAD, SCORE_WEIGHT_DTE, SCORE_WEIGHT_IV
 
@@ -313,6 +319,7 @@ def init_screening_config(option_type="put"):
     DIVIDEND_YIELD = SCREENING_CONFIG["DIVIDEND_YIELD"]
     MIN_IV_RANK = SCREENING_CONFIG["MIN_IV_RANK"]
     FILTER_DOWNTRENDS = SCREENING_CONFIG["FILTER_DOWNTRENDS"]
+    FILTER_UPTRENDS = SCREENING_CONFIG.get("FILTER_UPTRENDS", True)
     SCORE_WEIGHT_YIELD = SCREENING_CONFIG["SCORE_WEIGHT_YIELD"]
     SCORE_WEIGHT_OTM = SCREENING_CONFIG["SCORE_WEIGHT_OTM"]
     SCORE_WEIGHT_OI = SCREENING_CONFIG["SCORE_WEIGHT_OI"]
@@ -539,7 +546,8 @@ def batch_price_filter(tickers):
             "symbol,shortName,regularMarketPrice,trailingPE,"
             "averageDailyVolume3Month,marketCap,"
             "trailingAnnualDividendYield,fiftyDayAverage,"
-            "earningsTimestamp,earningsTimestampStart,earningsTimestampEnd"
+            "earningsTimestamp,earningsTimestampStart,earningsTimestampEnd,"
+            "dividendDate,trailingAnnualDividendRate"
         )
         data = safe_get(url)
         if data:
@@ -552,6 +560,9 @@ def batch_price_filter(tickers):
                 dividend_yield = _to_float(item.get("trailingAnnualDividendYield")) or 0.0
                 fifty_day_average = _to_float(item.get("fiftyDayAverage"))
                 next_earnings_dt = _extract_next_earnings_dt(item, now_dt)
+                ex_dividend_date_raw = item.get("dividendDate")
+                ex_dividend_date_dt = _parse_expiration(ex_dividend_date_raw)
+                trailing_annual_dividend_rate = _to_float(item.get("trailingAnnualDividendRate")) or 0.0
                 if (
                     price is not None
                     and price < PRICE_LIMIT
@@ -568,6 +579,8 @@ def batch_price_filter(tickers):
                             "dividend_yield": dividend_yield,
                             "fifty_day_average": fifty_day_average,
                             "next_earnings_dt": next_earnings_dt,
+                            "ex_dividend_date_dt": ex_dividend_date_dt,
+                            "trailing_annual_dividend_rate": trailing_annual_dividend_rate,
                         }
                     )
         if SLEEP_TIME > 0:
@@ -759,6 +772,27 @@ def is_downtrend(indicators):
     return signals >= 2
 
 
+def is_uptrend(indicators):
+    """Return True if the stock appears to be in a strong uptrend (capping explosive upside momentum for calls)."""
+    if indicators is None:
+        return False
+
+    price = indicators.get("price")
+    ema50 = indicators.get("ema50")
+    rsi = indicators.get("rsi")
+    adx = indicators.get("adx")
+
+    if price is None or ema50 is None:
+        return False
+
+    # Strong uptrend: price well above EMA50, overbought RSI, and strong trending momentum
+    above_ema = price > ema50 * 1.08
+    strong_rsi = rsi is not None and rsi > 70
+    strong_trend = adx is not None and adx > 25
+
+    return above_ema and strong_rsi and strong_trend
+
+
 def format_eta(seconds):
     if seconds < 0:
         return "--:--"
@@ -927,6 +961,66 @@ def _estimate_delta(
     return -math.exp(-q * t_years) * _normal_cdf(-d1)
 
 
+def _calculate_pop_ev(
+    price,
+    strike,
+    implied_volatility,
+    expiration_dt,
+    now_dt,
+    risk_free_rate,
+    dividend_yield,
+    premium,
+    option_type="put",
+):
+    if (
+        price is None
+        or strike is None
+        or implied_volatility is None
+        or premium is None
+        or price <= 0
+        or strike <= 0
+        or implied_volatility <= 0
+        or premium <= 0
+    ):
+        return None, None
+
+    t_years = _years_to_expiration(expiration_dt, now_dt)
+    if t_years is None or t_years <= 0:
+        return None, None
+
+    sigma_sqrt_t = implied_volatility * math.sqrt(t_years)
+    if sigma_sqrt_t <= 0:
+        return None, None
+
+    r = risk_free_rate
+    q = dividend_yield
+
+    try:
+        d2 = (
+            math.log(price / strike)
+            + (r - q - 0.5 * (implied_volatility**2)) * t_years
+        ) / sigma_sqrt_t
+        d1 = d2 + sigma_sqrt_t
+
+        n_d1 = _normal_cdf(d1)
+        n_d2 = _normal_cdf(d2)
+        n_neg_d1 = _normal_cdf(-d1)
+        n_neg_d2 = _normal_cdf(-d2)
+
+        if option_type == "call":
+            pop = n_neg_d2 * 100.0
+            expected_loss = price * math.exp((r - q) * t_years) * n_d1 - strike * n_d2
+            ev = premium - expected_loss
+        else:
+            pop = n_d2 * 100.0
+            expected_loss = strike * n_neg_d2 - price * math.exp((r - q) * t_years) * n_neg_d1
+            ev = premium - expected_loss
+
+        return _safe_round(pop, 1), _safe_round(ev, 2)
+    except Exception:
+        return None, None
+
+
 def _extract_contracts(options_payload, option_type="put"):
     options = options_payload.get("options", [])
     if not isinstance(options, list):
@@ -1002,8 +1096,8 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
         _bump_error_stat("contracts_excluded_earnings")
         return None
 
+    per_stock_div_yield = symbol_data.get("dividend_yield", DIVIDEND_YIELD)
     if delta is None:
-        per_stock_div_yield = symbol_data.get("dividend_yield", DIVIDEND_YIELD)
         delta = _estimate_delta(
             price,
             strike,
@@ -1014,6 +1108,51 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
             per_stock_div_yield,
             option_type=option_type,
         )
+
+    pop, ev = _calculate_pop_ev(
+        price,
+        strike,
+        implied_volatility,
+        expiration,
+        now_dt,
+        RISK_FREE_RATE,
+        per_stock_div_yield,
+        premium,
+        option_type=option_type,
+    )
+
+    # Ex-Dividend Risk Warning System
+    ex_div_dt = symbol_data.get("ex_dividend_date_dt")
+    ex_div_date_str = None
+    ex_div_risk = "NONE"
+
+    if ex_div_dt and isinstance(ex_div_dt, datetime):
+        ex_div_date_str = ex_div_dt.strftime("%Y-%m-%d")
+
+        if ex_div_dt.tzinfo is None:
+            ex_div_dt_aware = ex_div_dt.replace(tzinfo=timezone.utc)
+        else:
+            ex_div_dt_aware = ex_div_dt.astimezone(timezone.utc)
+
+        # Check if the ex-dividend date falls during the option contract's life
+        if now_dt.date() <= ex_div_dt_aware.date() <= expiration.date():
+            # Estimate quarterly dividend amount: Rate / 4 or Yield * Price / 4
+            trailing_annual_dividend_rate = symbol_data.get("trailing_annual_dividend_rate", 0.0)
+            if trailing_annual_dividend_rate > 0.0:
+                dividend_amount = trailing_annual_dividend_rate / 4.0
+            elif per_stock_div_yield > 0.0:
+                dividend_amount = (price * per_stock_div_yield) / 4.0
+            else:
+                dividend_amount = 0.0
+
+            if option_type == "call":
+                extrinsic_value = premium - max(price - strike, 0.0)
+                if dividend_amount > 0.0 and extrinsic_value < dividend_amount:
+                    ex_div_risk = "HIGH"
+                else:
+                    ex_div_risk = "MEDIUM"
+            else:
+                ex_div_risk = "DIVIDEND_DROP"
 
     # OTM% calculation differs for puts vs calls
     if option_type == "call":
@@ -1071,6 +1210,8 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
         "Failed Criterion": failed[0] if len(failed) == 1 else "",
         "Strike": round(strike, 2),
         "Expiration": expiration.strftime("%Y-%m-%d") if expiration else None,
+        "ExDividendDate": ex_div_date_str,
+        "ExDivRisk": ex_div_risk,
         "NextEarnings": next_earnings_dt.strftime("%Y-%m-%d")
         if isinstance(next_earnings_dt, datetime)
         else None,
@@ -1087,6 +1228,8 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
         "Volume": volume,
         "Delta": _safe_round(delta, 3),
         "ImpliedVolatility": _safe_round(implied_volatility, 3),
+        "PoP": pop,
+        "EV": ev,
         "Score": round(score, 2),
     }, failed
 
@@ -1107,6 +1250,13 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
             indicators = fetch_historical_indicators(symbol)
             if is_downtrend(indicators):
                 debug_log(f"Skipping {symbol}: strong downtrend detected")
+                return [], []
+
+    if option_type == "call" and FILTER_UPTRENDS:
+        if fifty_day_avg is None or price > fifty_day_avg * 1.08:
+            indicators = fetch_historical_indicators(symbol)
+            if is_uptrend(indicators):
+                debug_log(f"Skipping {symbol}: strong explosive uptrend detected")
                 return [], []
 
     api_filter = "calls" if option_type == "call" else "puts"
@@ -1335,6 +1485,7 @@ def main():
             "EarningsBeforeExpiry",
             "DTE",
             "Premium",
+            "EV",
             "MonthlyYieldPct",
             "AnnualizedYieldPct",
             "OTMPct",
@@ -1342,6 +1493,7 @@ def main():
             "Volume",
             "SpreadPct",
             "Delta",
+            "PoP",
             "ImpliedVolatility",
             "IVHVPercentile",
             "RSI",

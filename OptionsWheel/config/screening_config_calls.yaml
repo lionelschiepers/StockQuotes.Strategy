@@ -85,6 +85,9 @@ MIN_IV_RANK: 0.3
 # If true, skip stocks in a confirmed downtrend (price below key moving averages)
 FILTER_DOWNTRENDS: false
 
+# If true, skip call contracts on stocks experiencing extreme bullish momentum
+FILTER_UPTRENDS: true
+
 # ── Scoring weights (must roughly sum to 100) ─────────────────────────────────
 
 # Weight given to the yield component of the composite score

@@ -430,12 +430,12 @@
 
         #resultsTable th:nth-child(4),
         #resultsTable td:nth-child(4),
-        #resultsTable th:nth-child(12),
-        #resultsTable td:nth-child(12),
-        #resultsTable th:nth-child(17),
-        #resultsTable td:nth-child(17),
-        #resultsTable th:nth-child(20),
-        #resultsTable td:nth-child(20) {
+        #resultsTable th:nth-child(13),
+        #resultsTable td:nth-child(13),
+        #resultsTable th:nth-child(19),
+        #resultsTable td:nth-child(19),
+        #resultsTable th:nth-child(22),
+        #resultsTable td:nth-child(22) {
             border-left: 2px solid var(--group-divider) !important;
         }
 
@@ -615,7 +615,112 @@
             background: transparent;
             border: none;
         }
+
+        /* Detail Panel Styling */
+        tr.shown {
+            background: var(--row-hover) !important;
+        }
+        tr.shown td {
+            border-bottom: none !important;
+        }
+        tr.details-tr td {
+            padding: 0 !important;
+            border-bottom: 2px solid var(--accent) !important;
+        }
+        .details-panel {
+            background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-elevated) 100%);
+            padding: 1.25rem 1.5rem;
+            color: var(--text-main);
+            border-top: 1px solid var(--line-soft);
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+        .details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem;
+        }
+        @media (min-width: 1024px) {
+            .details-grid {
+                grid-template-columns: 1.15fr 0.9fr 0.95fr;
+            }
+        }
+        .details-card {
+            background: var(--bg-surface);
+            border: 1px solid var(--line-soft);
+            border-radius: 12px;
+            padding: 1rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+        .details-card-title {
+            font-size: 0.8rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--line-soft);
+            padding-bottom: 0.35rem;
+        }
+        .chart-container {
+            width: 100%;
+            height: 190px;
+            position: relative;
+            background: color-mix(in srgb, var(--bg-page) 50%, transparent);
+            border-radius: 8px;
+            border: 1px solid var(--line-soft);
+            overflow: hidden;
+            box-shadow: inset 0 1px 3px rgba(0,0,0,0.2);
+        }
+        .chart-container svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        .details-text-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            padding: 0.25rem 0;
+            border-bottom: 1px dashed var(--line-soft);
+        }
+        .details-text-row:last-child {
+            border-bottom: none;
+        }
+        .details-text-val {
+            font-family: 'IBM Plex Mono', monospace;
+            font-weight: 600;
+        }
+        .details-table {
+            width: 100%;
+            font-size: 0.75rem;
+        }
+        .details-table th {
+            text-align: left;
+            color: var(--text-muted);
+            font-weight: 700;
+            padding: 0.35rem 0.25rem;
+            border-bottom: 1px solid var(--line-soft);
+        }
+        .details-table td {
+            padding: 0.35rem 0.25rem;
+            border-bottom: 1px solid var(--line-soft);
+            font-family: 'IBM Plex Mono', monospace;
+        }
+        .details-table tr:last-child td {
+            border-bottom: none;
+        }
+        .strike-pill {
+            display: inline-block;
+            padding: 0.1rem 0.3rem;
+            background: var(--bg-muted);
+            border-radius: 4px;
+            font-weight: bold;
+        }
     </style>
+
 </head>
 <body class="p-2 md:p-4" data-theme="dark" data-density="compact">
     <div class="max-w-[98rem] mx-auto">
@@ -695,9 +800,11 @@
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-center" title="Whether earnings occurs on/before option expiration.">Earn<=Exp</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Days to expiration.">DTE</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Estimated premium collected per share.">Premium</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right text-emerald-600" title="Expected Value (per-share) of the written option under BSM model. Positive represents statistical edge.">EV ($)</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Estimated monthly yield percentage from premium.">Mo Yield%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="RISK" title="Out-of-the-money percentage from current price to strike.">OTM%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Option delta, indicating probability-like sensitivity to price moves.">Delta</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right text-indigo-600" title="Probability of Profit: standard-deviation-based probability under log-normal BSM that the option expires out of the money.">PoP%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Bid-ask spread as a percentage of option price (lower is better).">Spread%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Open interest (number of open option contracts).">OI</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="IV/HV Percentile: how current implied volatility compares to the stock's 52-week realized volatility range (0-1). Higher = IV is elevated relative to recent history = better for selling. Note: this uses historical price volatility, not a true IV rank.">IVHVPct</th>
@@ -736,6 +843,7 @@
             document.head.appendChild(columnWidthStyleEl);
 
             let dataTableInstance = null;
+            let activeDashboardData = null;
             let columnWidthsPx = (() => {
                 try {
                     const parsed = JSON.parse(localStorage.getItem(columnWidthsStorageKey) || '{}');
@@ -788,6 +896,17 @@
             };
 
             const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+
+            const escapeHtml = value => String(value).replace(/[&<>'"]/g, char => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                "'": '&#39;',
+                '"': '&quot;'
+            }[char]));
+
+            const formatMoney = value => value != null ? Number(value).toFixed(2) : 'N/A';
+            const formatPct = (value, digits = 2) => value != null ? `${Number(value).toFixed(digits)}%` : 'N/A';
 
             const persistColumnWidths = () => {
                 localStorage.setItem(columnWidthsStorageKey, JSON.stringify(columnWidthsPx));
@@ -928,16 +1047,7 @@
                     return Promise.all([resultsResponse.json(), configResponse.text().then(t => jsyaml.load(t))]);
                 })
                 .then(([data, config]) => {
-                    const escapeHtml = value => String(value).replace(/[&<>'"]/g, char => ({
-                        '&': '&amp;',
-                        '<': '&lt;',
-                        '>': '&gt;',
-                        "'": '&#39;',
-                        '"': '&quot;'
-                    }[char]));
-
-                    const formatMoney = value => value != null ? Number(value).toFixed(2) : 'N/A';
-                    const formatPct = (value, digits = 2) => value != null ? `${Number(value).toFixed(digits)}%` : 'N/A';
+                    activeDashboardData = data;
 
                     const targetMonthlyYield = Number(config.TARGET_MONTHLY_YIELD_PCT ?? 1.0);
                     const minAbsDelta = Number(config.MIN_ABS_DELTA ?? 0.0);
@@ -989,7 +1099,7 @@
 
                     // Populate Table
                     const tableBody = document.getElementById('tableBody');
-                    tableBody.innerHTML = data.results.map(r => {
+                    tableBody.innerHTML = data.results.map((r, idx) => {
                         const symbolRaw = r.Symbol != null ? String(r.Symbol) : '';
                         const symbolDisplayRaw = symbolRaw.length > 9 ? `${symbolRaw.slice(0, 8)}...` : (symbolRaw || 'N/A');
                         const symbolText = escapeHtml(symbolDisplayRaw);
@@ -1075,8 +1185,59 @@
                                 ? 'Yes'
                                 : 'No';
 
+                        const evVal = r.EV;
+                        let evClass = 'text-gray-500';
+                        let evText = 'N/A';
+                        if (evVal != null) {
+                            evClass = evVal > 0 ? 'text-emerald-600 font-semibold' : evVal < 0 ? 'text-red-600' : 'text-gray-700';
+                            const sign = evVal > 0 ? '+' : '';
+                            evText = `${sign}${evVal.toFixed(2)}`;
+                        }
+
+                        const popVal = r.PoP;
+                        let popClass = 'text-gray-500';
+                        let popText = 'N/A';
+                        if (popVal != null) {
+                            popClass = popVal >= 80 ? 'text-emerald-600 font-semibold' : popVal >= 70 ? 'text-amber-600' : 'text-red-600';
+                            popText = `${popVal.toFixed(1)}%`;
+                        }
+                        const exDivDate = r.ExDividendDate;
+                        const exDivRisk = r.ExDivRisk || 'NONE';
+
+                        let exDivHtml = '';
+                        if (exDivDate) {
+                            if (exDivRisk === 'HIGH') {
+                                exDivHtml = `
+                                    <div class="mt-1 flex flex-col gap-0.5">
+                                        <span class="inline-flex items-center justify-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200 animate-pulse cursor-help" style="width: fit-content;" title="High early assignment risk! Dividend amount exceeds extrinsic value of the call option during its life.">
+                                            ⚠️ Early Assign Risk
+                                        </span>
+                                        <span class="text-[10px] text-gray-500 font-mono">Ex-Div: ${escapeHtml(exDivDate)}</span>
+                                    </div>
+                                `;
+                            } else if (exDivRisk === 'MEDIUM') {
+                                exDivHtml = `
+                                    <div class="mt-1 flex flex-col gap-0.5">
+                                        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200 cursor-help" style="width: fit-content;" title="Ex-dividend date occurs during contract life. Premium contains enough extrinsic value to reduce early exercise risk.">
+                                            Ex-Div Overlap
+                                        </span>
+                                        <span class="text-[10px] text-gray-500 font-mono">Ex-Div: ${escapeHtml(exDivDate)}</span>
+                                    </div>
+                                `;
+                            } else if (exDivRisk === 'DIVIDEND_DROP') {
+                                exDivHtml = `
+                                    <div class="mt-1 flex flex-col gap-0.5">
+                                        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 border border-orange-200 cursor-help" style="width: fit-content;" title="Ex-dividend occurs during contract life. Underlying price will drop on ex-dividend date, increasing ITM risk for put sellers.">
+                                            ⚠️ Price Drop Risk
+                                        </span>
+                                        <span class="text-[10px] text-gray-500 font-mono">Ex-Div: ${escapeHtml(exDivDate)}</span>
+                                    </div>
+                                `;
+                            }
+                        }
+
                         return `
-                            <tr>
+                            <tr data-index="${idx}" class="cursor-pointer hover:bg-opacity-50">
                                 <td class="px-4 py-4 font-bold text-blue-600 font-mono" title="${escapeHtml(symbolRaw || 'N/A')}"><a href="${symbolHref}" target="_blank" rel="noopener noreferrer" class="hover:underline">${symbolText}</a></td>
                                 <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${nameText}">${nameText}</td>
                                 <td class="px-4 py-4" data-order="${isPass ? 0 : 1}">
@@ -1086,19 +1247,24 @@
                                 </td>
                                 <td class="px-4 py-4 font-mono text-gray-700 font-medium text-right">${formatMoney(r.Price)}</td>
                                 <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.Strike)}</td>
-                                <td class="px-4 py-4 text-gray-600">${expirationText}</td>
+                                <td class="px-4 py-4 text-gray-600">
+                                    <div class="font-semibold font-mono">${expirationText}</div>
+                                    ${exDivHtml}
+                                </td>
                                 <td class="px-4 py-4 text-gray-600">${nextEarningsText}</td>
                                 <td class="px-4 py-4 text-center" data-order="${earningsBeforeExpiry ? 1 : 0}">
                                     <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${earningsBadgeClass}">${earningsBadgeText}</span>
                                 </td>
                                 <td class="px-4 py-4 ${dteClass} text-right">${r.DTE != null ? r.DTE : 'N/A'}</td>
                                 <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.Premium)}</td>
+                                <td class="px-4 py-4 font-mono ${evClass} text-right">${evText}</td>
                                 <td class="px-4 py-4 font-mono font-bold ${yieldClass} text-right">
                                     ${formatPct(r.MonthlyYieldPct)}
                                     <span class="ml-1 text-xs text-gray-500">${yieldCue}</span>
                                 </td>
                                 <td class="px-4 py-4 font-mono ${otmClass} text-right">${formatPct(r.OTMPct)}</td>
                                 <td class="px-4 py-4 font-mono ${deltaClass} text-right">${r.Delta != null ? r.Delta.toFixed(3) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono ${popClass} text-right">${popText}</td>
                                 <td class="px-4 py-4 font-mono ${spreadClass} text-right">${formatPct(r.SpreadPct)}</td>
                                 <td class="px-4 py-4 text-gray-600 text-right">${r.OpenInterest != null ? r.OpenInterest : 'N/A'}</td>
                                 <td class="px-4 py-4 font-mono text-right ${r.IVHVPercentile != null && r.IVHVPercentile >= 0.5 ? 'text-emerald-600' : r.IVHVPercentile != null && r.IVHVPercentile >= 0.3 ? 'text-amber-600' : r.IVHVPercentile != null ? 'text-red-600' : 'text-gray-500'}">${r.IVHVPercentile != null ? r.IVHVPercentile.toFixed(2) : 'N/A'}</td>
@@ -1114,7 +1280,7 @@
                     const table = $('#resultsTable').DataTable({
                         lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
                         pageLength: -1,
-                        order: [[2, 'asc'], [19, 'desc'], [10, 'desc']],
+                        order: [[2, 'asc'], [21, 'desc'], [11, 'desc']],
                         responsive: true,
                         language: {
                             searchPlaceholder: "Search tickers...",
@@ -1207,7 +1373,7 @@
                         const maxDelta = Number(deltaSliderMax.value);
 
                         const statusText = (rowData[2] || '').toUpperCase();
-                        const deltaText = (rowData[12] || '').trim();
+                        const deltaText = (rowData[13] || '').trim();
                         const deltaValue = deltaText === 'N/A' || deltaText === '' ? null : Number(deltaText);
 
                         if (passOnly && !statusText.includes('PASS')) {
@@ -1261,6 +1427,381 @@
                     `;
                 });
             };
+
+            // Helper functions for expandable rows
+            const formatRowDetails = (r, allResults) => {
+                const escapedSymbol = escapeHtml(r.Symbol || '');
+                const escapedStrike = String(r.Strike).replace('.', '_');
+                const cardIdPayoff = `payoff-chart-${escapedSymbol}-${escapedStrike}`;
+                const cardIdTheta = `theta-chart-${escapedSymbol}-${escapedStrike}`;
+                
+                // Find other screened strikes for this symbol
+                const alternatives = allResults.filter(item => 
+                    item.Symbol === r.Symbol && Number(item.Strike) !== Number(r.Strike)
+                ).slice(0, 5); // limit to 5 alternative strikes
+                
+                let altTableHtml = '';
+                if (alternatives.length > 0) {
+                    altTableHtml = `
+                        <table class="details-table mt-1">
+                            <thead>
+                                <tr>
+                                    <th>Strike</th>
+                                    <th>DTE</th>
+                                    <th>Premium</th>
+                                    <th>Mo. Yield</th>
+                                    <th>Delta</th>
+                                    <th>Score</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${alternatives.map(alt => `
+                                    <tr>
+                                        <td><span class="strike-pill">$${Number(alt.Strike).toFixed(2)}</span></td>
+                                        <td>${alt.DTE}d</td>
+                                        <td>$${Number(alt.Premium).toFixed(2)}</td>
+                                        <td class="font-bold text-emerald-600">${Number(alt.MonthlyYieldPct).toFixed(2)}%</td>
+                                        <td>${alt.Delta != null ? Number(alt.Delta).toFixed(3) : 'N/A'}</td>
+                                        <td class="font-bold text-blue-500">${Number(alt.Score).toFixed(1)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    `;
+                } else {
+                    altTableHtml = `<p class="text-xs text-gray-500 italic mt-3">No alternative strikes screened for ${escapedSymbol}.</p>`;
+                }
+
+                const optionTypeLabel = currentOptionType === 'call' ? 'Call' : 'Put';
+                const breakEven = currentOptionType === 'call' ? (Number(r.Strike) + Number(r.Premium)) : (Number(r.Strike) - Number(r.Premium));
+                const maxProfit = Number(r.Premium) * 100;
+                const maxLossText = currentOptionType === 'call' 
+                    ? 'Unlimited (Naked) / Bounded by Stock' 
+                    : `$${((Number(r.Strike) - Number(r.Premium)) * 100).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+
+                return `
+                    <tr class="details-tr">
+                        <td colspan="20">
+                            <div class="details-panel">
+                                <div class="details-grid">
+                                    <!-- Column 1: Payoff Chart -->
+                                    <div class="details-card">
+                                        <div class="details-card-title">
+                                            <span>${optionTypeLabel} Payoff Diagram</span>
+                                            <span class="text-xs text-gray-500 font-normal">at Expiration</span>
+                                        </div>
+                                        <div class="chart-container" id="${cardIdPayoff}"></div>
+                                        <div class="mt-3 space-y-1">
+                                            <div class="details-text-row">
+                                                <span class="text-gray-500">Break-even Price</span>
+                                                <span class="details-text-val text-blue-500">$${breakEven.toFixed(2)}</span>
+                                            </div>
+                                            <div class="details-text-row">
+                                                <span class="text-gray-500">Max Profit (per contract)</span>
+                                                <span class="details-text-val text-emerald-600">+$${maxProfit.toFixed(0)}</span>
+                                            </div>
+                                            <div class="details-text-row">
+                                                <span class="text-gray-500">Max Loss (per contract)</span>
+                                                <span class="details-text-val text-red-500">${maxLossText}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Column 2: Theta Decay Chart -->
+                                    <div class="details-card">
+                                        <div class="details-card-title">
+                                            <span>Theta Decay Curve</span>
+                                            <span class="text-xs text-amber-500 font-bold">Premium Decay</span>
+                                        </div>
+                                        <div class="chart-container" id="${cardIdTheta}"></div>
+                                        <div class="mt-3 space-y-1">
+                                            <div class="details-text-row">
+                                                <span class="text-gray-500">Current Extrinsic Value</span>
+                                                <span class="details-text-val">$${Number(r.Premium).toFixed(2)}</span>
+                                            </div>
+                                            <div class="details-text-row">
+                                                <span class="text-gray-500">Days to Expiration (DTE)</span>
+                                                <span class="details-text-val">${r.DTE} days</span>
+                                            </div>
+                                            <div class="details-text-row">
+                                                <span class="text-gray-500">Theta Zone (30-45d Sweetspot)</span>
+                                                <span class="details-text-val font-bold ${r.DTE >= 30 && r.DTE <= 50 ? 'text-emerald-600' : 'text-gray-500'}">
+                                                    ${r.DTE >= 30 && r.DTE <= 50 ? 'OPTIMAL' : r.DTE < 30 ? 'High Gamma Risk' : 'Slow Decay'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    
+                                    <!-- Column 3: Alternative Striking Sweeps -->
+                                    <div class="details-card">
+                                        <div class="details-card-title">
+                                            <span>Strikes Skew Sweep (${escapedSymbol})</span>
+                                            <span class="text-xs text-blue-500 font-semibold">${alternatives.length} alternatives</span>
+                                        </div>
+                                        <div class="overflow-x-auto">
+                                            ${altTableHtml}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            };
+
+            const renderPayoffChart = (containerId, r) => {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+
+                const width = container.clientWidth || 320;
+                const height = container.clientHeight || 190;
+                const padding = { top: 25, right: 30, bottom: 30, left: 40 };
+
+                const isCall = currentOptionType === 'call';
+                const strike = Number(r.Strike);
+                const premium = Number(r.Premium);
+                const price = Number(r.Price);
+                const breakEven = isCall ? (strike + premium) : (strike - premium);
+
+                // Price axis range
+                const minPrice = Math.min(price, strike) * 0.85;
+                const maxPrice = Math.max(price, strike) * 1.15;
+                const priceRange = maxPrice - minPrice || 1;
+
+                // P/L axis range
+                const maxPL = premium * 1.25;
+                const minPL = -Math.max(strike * 0.15, premium * 3);
+                const plRange = maxPL - minPL || 1;
+
+                // Coordinate projection functions
+                const getX = (p) => padding.left + ((p - minPrice) / priceRange) * (width - padding.left - padding.right);
+                const getY = (pl) => padding.top + (1 - (pl - minPL) / plRange) * (height - padding.top - padding.bottom);
+
+                // Calculate P/L line points
+                const points = [];
+                const steps = 100;
+                for (let i = 0; i <= steps; i++) {
+                    const p = minPrice + (i / steps) * priceRange;
+                    let pl = 0;
+                    if (isCall) {
+                        pl = p <= strike ? premium : premium - (p - strike);
+                    } else {
+                        pl = p >= strike ? premium : premium - (strike - p);
+                    }
+                    points.push({ x: getX(p), y: getY(pl) });
+                }
+
+                // SVG path string
+                const pathD = points.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
+
+                const zeroY = getY(0);
+                const zeroLineY = clamp(zeroY, padding.top, height - padding.bottom);
+
+                // Create SVG Elements
+                const isDark = document.body.getAttribute('data-theme') === 'dark';
+                const textStyle = `font-family: system-ui, sans-serif; font-size: 9px; fill: ${isDark ? '#8b949e' : '#5f6f84'}; font-weight: 600;`;
+                const gridStroke = isDark ? '#30363d' : '#dbe4f0';
+
+                // 1-SD Shaded Band (based on IV if available)
+                let sdBandHtml = '';
+                const iv = Number(r.ImpliedVolatility);
+                const dte = Number(r.DTE);
+                if (iv && dte) {
+                    const t = dte / 365.0;
+                    const sd = price * iv * Math.sqrt(t);
+                    const sdMin = price - sd;
+                    const sdMax = price + sd;
+                    const xSdMin = clamp(getX(sdMin), padding.left, width - padding.right);
+                    const xSdMax = clamp(getX(sdMax), padding.left, width - padding.right);
+                    sdBandHtml = `
+                        <rect x="${xSdMin.toFixed(1)}" y="${padding.top}" width="${(xSdMax - xSdMin).toFixed(1)}" height="${height - padding.top - padding.bottom}" 
+                              fill="url(#sd-gradient)" opacity="0.1" />
+                    `;
+                }
+
+                container.innerHTML = `
+                    <svg width="100%" height="100%" viewBox="0 0 ${width} ${height}">
+                        <defs>
+                            <linearGradient id="sd-gradient" x1="0" y1="0" x2="1" y2="0">
+                                <stop offset="0%" stop-color="#58a6ff" stop-opacity="0"/>
+                                <stop offset="35%" stop-color="#58a6ff" stop-opacity="0.8"/>
+                                <stop offset="50%" stop-color="#58a6ff" stop-opacity="1"/>
+                                <stop offset="65%" stop-color="#58a6ff" stop-opacity="0.8"/>
+                                <stop offset="100%" stop-color="#58a6ff" stop-opacity="0"/>
+                            </linearGradient>
+                        </defs>
+
+                        <!-- 1-SD Volatility Shading -->
+                        ${sdBandHtml}
+
+                        <!-- Grid lines -->
+                        <line x1="${padding.left}" y1="${zeroLineY}" x2="${width - padding.right}" y2="${zeroLineY}" stroke="${gridStroke}" stroke-width="1.2" stroke-dasharray="2 2" />
+                        <line x1="${getX(strike)}" y1="${padding.top}" x2="${getX(strike)}" y2="${height - padding.bottom}" stroke="${gridStroke}" stroke-width="0.8" stroke-dasharray="3 3" />
+                        <line x1="${getX(breakEven)}" y1="${padding.top}" x2="${getX(breakEven)}" y2="${height - padding.bottom}" stroke="${gridStroke}" stroke-width="0.8" stroke-dasharray="1 3" />
+                        <line x1="${getX(price)}" y1="${padding.top}" x2="${getX(price)}" y2="${height - padding.bottom}" stroke="#58a6ff" stroke-width="1" opacity="0.5" />
+
+                        <!-- P/L Payoff Line -->
+                        <path d="${pathD}" fill="none" stroke="${isCall ? (price > breakEven ? '#f85149' : '#3fb950') : (price < breakEven ? '#f85149' : '#3fb950')}" stroke-width="2.2" stroke-linecap="round" />
+
+                        <!-- Vertical labels -->
+                        <text x="${getX(strike)}" y="${height - padding.bottom + 12}" style="${textStyle} text-anchor: middle;">Strike ($${strike.toFixed(0)})</text>
+                        <text x="${getX(breakEven)}" y="${padding.top - 6}" style="${textStyle} fill: #58a6ff; text-anchor: middle;">B/E ($${breakEven.toFixed(2)})</text>
+                        <text x="${getX(price)}" y="${height - padding.bottom + 23}" style="${textStyle} fill: #58a6ff; text-anchor: middle; font-weight: 800;">Stock ($${price.toFixed(2)})</text>
+
+                        <!-- Y Axis labels -->
+                        <text x="${padding.left - 6}" y="${getY(premium) + 3}" style="${textStyle} text-anchor: end; fill: #3fb950;">+$${(premium * 100).toFixed(0)}</text>
+                        <text x="${padding.left - 6}" y="${zeroLineY + 3}" style="${textStyle} text-anchor: end;">$0</text>
+                        <text x="${padding.left - 6}" y="${getY(minPL * 0.6) + 3}" style="${textStyle} text-anchor: end; fill: #f85149;">Loss</text>
+
+                        <!-- Axes borders -->
+                        <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${height - padding.bottom}" stroke="${isDark ? '#30363d' : '#c5d1e0'}" stroke-width="1" />
+                        <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="${isDark ? '#30363d' : '#c5d1e0'}" stroke-width="1" />
+                    </svg>
+                `;
+            };
+
+            const renderThetaChart = (containerId, r) => {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+
+                const width = container.clientWidth || 320;
+                const height = container.clientHeight || 190;
+                const padding = { top: 20, right: 30, bottom: 35, left: 35 };
+
+                const dte = Number(r.DTE) || 45;
+                const premium = Number(r.Premium) || 1.0;
+                
+                const getX = (tDays) => padding.left + (1 - tDays / dte) * (width - padding.left - padding.right);
+                const getY = (val) => padding.top + (1 - val / premium) * (height - padding.top - padding.bottom);
+
+                const points = [];
+                const steps = 60;
+                for (let i = 0; i <= steps; i++) {
+                    const tDays = dte - (i / steps) * dte;
+                    const val = premium * Math.sqrt(tDays / dte);
+                    points.push({ x: getX(tDays), y: getY(val) });
+                }
+
+                const pathD = points.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
+                const areaD = `${pathD} L ${getX(0).toFixed(1)} ${getY(0).toFixed(1)} L ${getX(dte).toFixed(1)} ${getY(0).toFixed(1)} Z`;
+
+                let sweetSpotHtml = '';
+                if (dte > 30) {
+                    const xStart = getX(Math.min(dte, 45));
+                    const xEnd = getX(30);
+                    sweetSpotHtml = `
+                        <rect x="${xStart.toFixed(1)}" y="${padding.top}" width="${(xEnd - xStart).toFixed(1)}" height="${height - padding.top - padding.bottom}" 
+                              fill="#dbab09" opacity="0.06" />
+                        <text x="${((xStart + xEnd) / 2).toFixed(1)}" y="${padding.top + 13}" 
+                              style="font-family: system-ui, sans-serif; font-size: 8px; fill: #dbab09; font-weight: 800; text-anchor: middle;">SWEET SPOT</text>
+                    `;
+                }
+
+                const isDark = document.body.getAttribute('data-theme') === 'dark';
+                const textStyle = `font-family: system-ui, sans-serif; font-size: 9px; fill: ${isDark ? '#8b949e' : '#5f6f84'}; font-weight: 600;`;
+                const gridStroke = isDark ? '#30363d' : '#dbe4f0';
+
+                container.innerHTML = `
+                    <svg width="100%" height="100%" viewBox="0 0 ${width} ${height}">
+                        <defs>
+                            <linearGradient id="decay-fill" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stop-color="#dbab09" stop-opacity="0.15"/>
+                                <stop offset="100%" stop-color="#dbab09" stop-opacity="0"/>
+                            </linearGradient>
+                        </defs>
+
+                        <!-- Grid lines -->
+                        <line x1="${padding.left}" y1="${getY(premium * 0.5)}" x2="${width - padding.right}" y2="${getY(premium * 0.5)}" stroke="${gridStroke}" stroke-width="0.8" stroke-dasharray="3 3" />
+                        <line x1="${getX(30)}" y1="${padding.top}" x2="${getX(30)}" y2="${height - padding.bottom}" stroke="${gridStroke}" stroke-width="0.8" stroke-dasharray="2 2" />
+                        <line x1="${getX(10)}" y1="${padding.top}" x2="${getX(10)}" y2="${height - padding.bottom}" stroke="${gridStroke}" stroke-width="0.8" stroke-dasharray="2 2" />
+
+                        <!-- Sweet spot -->
+                        ${sweetSpotHtml}
+
+                        <!-- Shaded Area -->
+                        <path d="${areaD}" fill="url(#decay-fill)" />
+
+                        <!-- Premium Curve line -->
+                        <path d="${pathD}" fill="none" stroke="#dbab09" stroke-width="2" stroke-linecap="round" />
+
+                        <!-- Entry Marker -->
+                        <circle cx="${getX(dte).toFixed(1)}" cy="${getY(premium).toFixed(1)}" r="4" fill="#dbab09" stroke="${isDark ? '#0d1117' : '#ffffff'}" stroke-width="1" />
+                        <text x="${getX(dte).toFixed(1) + 7}" y="${getY(premium).toFixed(1) + 3}" style="${textStyle} fill: #dbab09; font-weight: 800;">Entry ($${premium.toFixed(2)})</text>
+
+                        <!-- Expiry Marker -->
+                        <circle cx="${getX(0).toFixed(1)}" cy="${getY(0).toFixed(1)}" r="3" fill="#f85149" />
+
+                        <!-- X Axis labels -->
+                        <text x="${getX(dte)}" y="${height - padding.bottom + 12}" style="${textStyle} text-anchor: middle;">${dte}d</text>
+                        <text x="${getX(30)}" y="${height - padding.bottom + 12}" style="${textStyle} text-anchor: middle;">30d</text>
+                        <text x="${getX(10)}" y="${height - padding.bottom + 12}" style="${textStyle} text-anchor: middle;">10d</text>
+                        <text x="${getX(0)}" y="${height - padding.bottom + 12}" style="${textStyle} text-anchor: middle; fill: #f85149; font-weight: bold;">Expiry</text>
+
+                        <!-- Y Axis labels -->
+                        <text x="${padding.left - 6}" y="${getY(premium) + 3}" style="${textStyle} text-anchor: end;">100%</text>
+                        <text x="${padding.left - 6}" y="${getY(premium * 0.5) + 3}" style="${textStyle} text-anchor: end;">50%</text>
+                        <text x="${padding.left - 6}" y="${getY(0) + 3}" style="${textStyle} text-anchor: end; fill: #f85149;">0%</text>
+
+                        <!-- Axes borders -->
+                        <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${height - padding.bottom}" stroke="${isDark ? '#30363d' : '#c5d1e0'}" stroke-width="1" />
+                        <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="${isDark ? '#30363d' : '#c5d1e0'}" stroke-width="1" />
+                    </svg>
+                `;
+            };
+
+            const renderDetailCharts = (r) => {
+                const escapedSymbol = escapeHtml(r.Symbol || '');
+                const escapedStrike = String(r.Strike).replace('.', '_');
+                renderPayoffChart(`payoff-chart-${escapedSymbol}-${escapedStrike}`, r);
+                renderThetaChart(`theta-chart-${escapedSymbol}-${escapedStrike}`, r);
+            };
+
+            // Register Delegated Table Row Click listener once
+            $('#resultsTable tbody').on('click', 'tr[data-index]', function(e) {
+                // Ignore clicks on anchors, buttons, inputs, resize-handles
+                if (e.target.tagName.toLowerCase() === 'a' || $(e.target).closest('a').length || 
+                    e.target.tagName.toLowerCase() === 'button' || $(e.target).closest('button').length ||
+                    e.target.tagName.toLowerCase() === 'input' || e.target.classList.contains('resize-handle')) {
+                    return;
+                }
+
+                const tr = $(this);
+                const idx = tr.data('index');
+                if (idx === undefined) return;
+
+                if (!dataTableInstance) return;
+                const row = dataTableInstance.row(tr);
+
+                if (row.child.isShown()) {
+                    // Close the detail row
+                    row.child.hide();
+                    tr.removeClass('shown');
+                    tr.next('.details-tr').remove();
+                } else {
+                    // Close any other open rows to keep table clean
+                    dataTableInstance.rows().every(function() {
+                        if (this.child.isShown()) {
+                            this.child.hide();
+                            $(this.node()).removeClass('shown');
+                        }
+                    });
+                    $('.details-tr').remove();
+
+                    // Open this row
+                    if (activeDashboardData && activeDashboardData.results) {
+                        const originalObj = activeDashboardData.results[idx];
+                        row.child(formatRowDetails(originalObj, activeDashboardData.results)).show();
+                        tr.addClass('shown');
+                        
+                        // Style the child row explicitly
+                        const childNode = row.child();
+                        $(childNode).addClass('details-tr');
+                        
+                        // Draw SVGs
+                        renderDetailCharts(originalObj);
+                    }
+                }
+            });
 
             // Initial load
             loadDashboardData();

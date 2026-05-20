@@ -16,7 +16,7 @@ EXCLUDE_EARNINGS_BEFORE_EXPIRY: false
 # ── Premium / yield targets ────────────────────────────────────────────────────
 
 # Minimum annualised monthly yield expected from the premium (%)
-TARGET_MONTHLY_YIELD_PCT: 1.5
+TARGET_MONTHLY_YIELD_PCT: 1.3
 
 # Minimum option premium in USD per contract (filters illiquid / penny options)
 MIN_PREMIUM: 0.2
@@ -27,12 +27,12 @@ MIN_PREMIUM: 0.2
 MIN_ABS_DELTA: 0.0
 
 # Maximum absolute delta — for cash-secured puts, keep well below 0.5 (OTM)
-MAX_ABS_DELTA: 0.10
+MAX_ABS_DELTA: 0.12
 
 # ── Days-to-expiry (DTE) window ────────────────────────────────────────────────
 
 # Minimum days to expiry; avoids gamma risk too close to expiration
-MIN_DTE: 7
+MIN_DTE: 4
 
 # Maximum days to expiry; beyond this theta decay is too slow
 MAX_DTE: 60
@@ -45,7 +45,7 @@ MIN_OTM_PCT: 5.0
 # ── Liquidity filters ─────────────────────────────────────────────────────────
 
 # Minimum open interest on the contract
-MIN_OPEN_INTEREST: 100
+MIN_OPEN_INTEREST: 50
 
 # Minimum daily volume on the contract
 MIN_VOLUME: 5
@@ -56,10 +56,10 @@ MAX_SPREAD_PCT: 20.0
 # ── Result set limits ──────────────────────────────────────────────────────────
 
 # Maximum number of expiration dates to evaluate per symbol
-MAX_EXPIRATIONS_PER_SYMBOL: 10
+MAX_EXPIRATIONS_PER_SYMBOL: 20
 
 # Maximum number of contracts to return per symbol (best scores only)
-MAX_CONTRACTS_PER_SYMBOL: 3
+MAX_CONTRACTS_PER_SYMBOL: 5
 
 # ── API / network settings ─────────────────────────────────────────────────────
 

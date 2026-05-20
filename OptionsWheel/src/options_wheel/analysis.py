@@ -491,14 +491,34 @@ def safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES):
 
             if response.status_code >= 500:
                 _bump_error_stat("http_5xx")
-                backoff = min(0.52 * (2**attempt), 5.0)
-                debug_log(
-                    f"HTTP {response.status_code} on attempt {attempt + 1}/{max_retries}; "
-                    f"backoff={backoff:.2f}s; body={_shorten_response_text(response.text)}"
-                )
-                _set_global_cooldown(backoff)
-                last_error = f"HTTP {response.status_code}: {_shorten_response_text(response.text)}"
-                time.sleep(backoff)
+                body_snippet = _shorten_response_text(response.text)
+                if "Too Many Requests" in response.text:
+                    # Edge/CDN rate-limit disguised as a 500 — treat like a 429.
+                    _bump_error_stat("rate_limited_429")
+                    retry_after_raw = response.headers.get("Retry-After", "5")
+                    try:
+                        retry_after = float(retry_after_raw)
+                    except ValueError:
+                        retry_after = 5.0
+                    retry_after = max(retry_after, 5.0) + random.uniform(0.5, 2.0)
+                    _on_rate_limited(retry_after)
+                    _set_global_cooldown(retry_after)
+                    print(f"Edge rate-limited (HTTP 500). Waiting {retry_after:.2f} seconds...")
+                    debug_log(
+                        f"HTTP 500 'Too Many Requests' on attempt {attempt + 1}/{max_retries}; "
+                        f"retry-after={retry_after:.2f}s; body={body_snippet}"
+                    )
+                    last_error = f"HTTP 500 Edge rate-limited (retry-after: {retry_after:.2f}s)"
+                    time.sleep(retry_after)
+                else:
+                    backoff = min(0.52 * (2**attempt), 5.0)
+                    debug_log(
+                        f"HTTP {response.status_code} on attempt {attempt + 1}/{max_retries}; "
+                        f"backoff={backoff:.2f}s; body={body_snippet}"
+                    )
+                    _set_global_cooldown(backoff)
+                    last_error = f"HTTP {response.status_code}: {body_snippet}"
+                    time.sleep(backoff)
                 continue
 
             # Do not retry most client errors (invalid/unsupported symbol, bad request, etc.)

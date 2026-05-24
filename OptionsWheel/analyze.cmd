@@ -1,4 +1,7 @@
 @echo off
+echo === Installing required packages ===
+pip install -r "%~dp0requirements.txt" --quiet
+echo.
 echo === Analyzing CALL options ===
 python analyze_calls.py
 echo.

@@ -16,7 +16,7 @@ EXCLUDE_EARNINGS_BEFORE_EXPIRY: false
 # ── Premium / yield targets ────────────────────────────────────────────────────
 
 # Minimum annualised monthly yield expected from the premium (%)
-TARGET_MONTHLY_YIELD_PCT: 1.5
+TARGET_MONTHLY_YIELD_PCT: 1.3
 
 # Minimum option premium in USD per contract (filters illiquid / penny options)
 MIN_PREMIUM: 0.2

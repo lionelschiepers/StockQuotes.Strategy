@@ -23,6 +23,10 @@ permissions:
   pages: write
   id-token: write
 
+concurrency:
+  group: "optionswheel-analysis-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   analysis:
     environment:

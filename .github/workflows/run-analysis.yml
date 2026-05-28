@@ -19,10 +19,15 @@ on:
       - "OptionsWheel/data/**"
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   analysis:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
 
     defaults:
@@ -68,16 +73,45 @@ jobs:
         if: steps.brussels_time.outputs.should_run == 'true'
         run: python analyze_puts.py
 
-      - name: Commit updated data files
+      - name: Configure GitHub Pages
+        if: steps.brussels_time.outputs.should_run == 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Build publish folder
         if: steps.brussels_time.outputs.should_run == 'true'
         shell: bash
+        working-directory: .
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data
-          if git diff --cached --quiet; then
-            echo "No data changes to commit."
-            exit 0
-          fi
-          git commit -m "chore: update analysis data [skip ci]"
-          git push
+          rm -rf _site
+          mkdir -p _site
+
+          cp -R OptionsWheel/web _site/web
+          mkdir -p _site/data
+          cp -R OptionsWheel/data/output _site/data/output
+          cp -R OptionsWheel/config _site/config
+
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0; url=./web/index.html">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>OptionsWheel Dashboard</title>
+          </head>
+          <body>
+            <p>Redirecting to <a href="./web/index.html">OptionsWheel dashboard</a>...</p>
+          </body>
+          </html>
+          HTML
+
+      - name: Upload Pages artifact
+        if: steps.brussels_time.outputs.should_run == 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        if: steps.brussels_time.outputs.should_run == 'true'
+        id: deployment
+        uses: actions/deploy-pages@v4

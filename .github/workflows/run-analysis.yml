@@ -79,5 +79,5 @@ jobs:
             echo "No data changes to commit."
             exit 0
           fi
-          git commit -m "chore: update analysis data []"
+          git commit -m "chore: update analysis data [skip ci]"
           git push

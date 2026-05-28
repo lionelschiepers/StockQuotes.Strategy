@@ -1,0 +1,70 @@
+name: Deploy OptionsWheel to GitHub Pages
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/deploy-pages.yml"
+      - "OptionsWheel/web/**"
+      - "OptionsWheel/data/output/**"
+      - "OptionsWheel/config/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build publish folder
+        shell: bash
+        run: |
+          rm -rf _site
+          mkdir -p _site
+
+          cp -R OptionsWheel/web _site/web
+          mkdir -p _site/data
+          cp -R OptionsWheel/data/output _site/data/output
+          cp -R OptionsWheel/config _site/config
+
+          cat > _site/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <meta http-equiv="refresh" content="0; url=./web/index.html">
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+            <title>OptionsWheel Dashboard</title>
+          </head>
+          <body>
+            <p>Redirecting to <a href="./web/index.html">OptionsWheel dashboard</a>...</p>
+          </body>
+          </html>
+          HTML
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

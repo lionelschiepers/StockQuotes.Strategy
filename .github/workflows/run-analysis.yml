@@ -43,22 +43,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check Brussels schedule window
-        id: brussels_time
-        run: |
-          if [[ "${{ github.event_name }}" != "schedule" ]]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          brussels_hour=$(TZ=Europe/Brussels date +%H)
-          if [[ "$brussels_hour" == "16" ]]; then
-            echo "should_run=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "should_run=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping scheduled run: current Brussels hour is $brussels_hour, not 16."
-          fi
-
       - name: Set up Python
         if: steps.brussels_time.outputs.should_run == 'true'
         uses: actions/setup-python@v5

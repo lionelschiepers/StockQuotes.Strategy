@@ -2,7 +2,7 @@
 
 # Maximum stock price to consider (avoids high-priced stocks where cash-secured
 # put collateral requirements would be too large for small accounts)
-MAX_PRICE: 120.0
+MAX_PRICE: 150.0
 
 # Minimum average daily trading volume for the underlying stock
 MIN_STOCK_AVG_VOLUME: 500000

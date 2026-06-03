@@ -2,6 +2,11 @@
 setlocal
 pushd "%~dp0"
 
+echo === Upgrading pip ===
+python -m pip install --upgrade pip --quiet
+if errorlevel 1 goto :error
+
+echo.
 echo === Installing required packages ===
 python -m pip install -r "%~dp0requirements.txt" --quiet
 if errorlevel 1 goto :error

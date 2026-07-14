@@ -1544,6 +1544,7 @@ def main():
         "near_misses": len(near_misses),
         "screening_mode": "options-first",
         "target_monthly_yield_pct": TARGET_MONTHLY_YIELD_PCT,
+        "options_api_url": OPTIONS_URL,
         "screening_config": SCREENING_CONFIG,
         "results": combined_results,
     }

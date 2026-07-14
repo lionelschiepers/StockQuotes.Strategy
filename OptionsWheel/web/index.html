@@ -48,7 +48,8 @@
             --ok-bg: rgba(63, 185, 80, 0.16);
             --warn-bg: rgba(210, 153, 34, 0.16);
             --bad-bg: rgba(248, 81, 73, 0.16);
-            --symbol-col-width: 9ch;
+            --symbol-col-width: 5.75rem;
+            --symbol-cell-padding-x: 1.24rem;
             --name-col-width: 26ch;
         }
 
@@ -401,7 +402,7 @@
         #resultsTable th:nth-child(2),
         #resultsTable td:nth-child(2) {
             position: sticky;
-            left: var(--symbol-col-width);
+            left: calc(var(--symbol-col-width) + var(--symbol-cell-padding-x));
             min-width: var(--name-col-width);
             width: var(--name-col-width);
             z-index: 2;
@@ -454,6 +455,10 @@
             padding: 0.5rem 0.62rem !important;
         }
 
+        body[data-density='compact'] {
+            --symbol-cell-padding-x: 1.24rem;
+        }
+
         body[data-density='compact'] #resultsTable tbody td {
             padding: 0.42rem 0.62rem !important;
             font-size: 0.77rem;
@@ -462,6 +467,10 @@
         body[data-density='ultra'] table.dataTable thead th {
             font-size: 0.65rem;
             padding: 0.42rem 0.52rem !important;
+        }
+
+        body[data-density='ultra'] {
+            --symbol-cell-padding-x: 1.04rem;
         }
 
         body[data-density='ultra'] #resultsTable tbody td {
@@ -473,6 +482,10 @@
         body[data-density='comfortable'] table.dataTable thead th {
             font-size: 0.78rem;
             padding: 0.74rem 0.8rem !important;
+        }
+
+        body[data-density='comfortable'] {
+            --symbol-cell-padding-x: 1.6rem;
         }
 
         body[data-density='comfortable'] #resultsTable tbody td {
@@ -719,6 +732,297 @@
             border-radius: 4px;
             font-weight: bold;
         }
+
+        .option-chain-btn {
+            display: inline-flex;
+            flex: 0 0 auto;
+            align-items: center;
+            justify-content: center;
+            width: 1.45rem;
+            height: 1.45rem;
+            border: 1px solid color-mix(in srgb, var(--accent) 50%, var(--line-soft));
+            border-radius: 6px;
+            background: color-mix(in srgb, var(--accent) 12%, var(--bg-elevated));
+            color: var(--accent);
+            padding: 0;
+            font-size: 0.8rem;
+            font-weight: 800;
+            line-height: 1;
+            white-space: nowrap;
+        }
+
+        .option-chain-btn:hover,
+        .option-chain-btn:focus-visible {
+            background: color-mix(in srgb, var(--accent) 22%, var(--bg-elevated));
+            outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+            outline-offset: 1px;
+        }
+
+        #optionChainDialog {
+            width: min(96vw, 96rem);
+            height: min(88vh, 58rem);
+            max-width: none;
+            max-height: none;
+            margin: auto;
+            padding: 0;
+            overflow: hidden;
+            border: 1px solid var(--line-strong);
+            border-radius: 16px;
+            background: var(--bg-surface);
+            color: var(--text-main);
+            box-shadow: 0 28px 80px rgba(0, 0, 0, 0.58);
+        }
+
+        #optionChainDialog::backdrop {
+            background: rgba(1, 4, 9, 0.72);
+            backdrop-filter: blur(3px);
+        }
+
+        .chain-dialog-shell {
+            display: flex;
+            height: 100%;
+            min-height: 0;
+            flex-direction: column;
+        }
+
+        .chain-dialog-header,
+        .chain-dialog-footer {
+            flex: 0 0 auto;
+            border-color: var(--line-strong);
+            background: color-mix(in srgb, var(--bg-elevated) 90%, var(--accent));
+        }
+
+        .chain-dialog-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--line-strong);
+        }
+
+        .chain-dialog-title {
+            margin: 0;
+            color: var(--text-main);
+            font-size: 1.35rem;
+            font-weight: 800;
+        }
+
+        .chain-dialog-subtitle {
+            margin-top: 0.2rem;
+            color: var(--text-muted);
+            font-size: 0.9rem;
+        }
+
+        .chain-dialog-close-icon {
+            width: 2.5rem;
+            height: 2.5rem;
+            border-radius: 999px;
+            color: var(--text-muted);
+            font-size: 1.65rem;
+            line-height: 1;
+        }
+
+        .chain-dialog-close-icon:hover,
+        .chain-dialog-close-icon:focus-visible {
+            background: var(--bg-muted);
+            color: var(--text-main);
+            outline: 2px solid var(--accent);
+        }
+
+        .chain-dialog-content {
+            display: flex;
+            min-height: 0;
+            flex: 1 1 auto;
+            flex-direction: column;
+            gap: 1rem;
+            padding: 1.25rem 1.5rem;
+        }
+
+        .chain-dialog-controls {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--line-soft);
+        }
+
+        .chain-type-tabs {
+            display: inline-flex;
+            gap: 0.55rem;
+        }
+
+        .chain-type-tab {
+            min-width: 7rem;
+            border: 1px solid var(--line-soft);
+            border-radius: 9px;
+            background: var(--bg-muted);
+            color: var(--text-muted);
+            padding: 0.65rem 1rem;
+            font-weight: 800;
+        }
+
+        .chain-type-tab[aria-selected='true'] {
+            border-color: #ffffff;
+            background: #0969da;
+            color: #ffffff;
+            box-shadow: 0 0 0 2px var(--bg-surface), 0 0 0 4px #ffffff;
+        }
+
+        .chain-expiration-control {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        #chainExpirationSelect {
+            min-width: 12rem;
+            border: 1px solid var(--line-strong);
+            border-radius: 9px;
+            background: var(--control-bg);
+            color: var(--text-main);
+            padding: 0.65rem 0.8rem;
+            font-weight: 700;
+        }
+
+        #chainExpirationSelect:focus-visible {
+            border-color: var(--accent);
+            outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+        }
+
+        .chain-status {
+            display: grid;
+            min-height: 14rem;
+            place-items: center;
+            color: var(--text-muted);
+            text-align: center;
+        }
+
+        .chain-table-wrap {
+            min-height: 0;
+            flex: 1 1 auto;
+            overflow: auto;
+            border: 1px solid var(--line-strong);
+            border-radius: 10px;
+            background: var(--bg-elevated);
+        }
+
+        .chain-table {
+            width: 100%;
+            min-width: 76rem;
+            border-collapse: separate;
+            border-spacing: 0;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.78rem;
+        }
+
+        .chain-table th {
+            position: sticky;
+            top: 0;
+            z-index: 1;
+            background: var(--bg-muted);
+            color: var(--text-muted);
+            padding: 0.8rem 0.75rem;
+            border-bottom: 1px solid var(--line-strong);
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .chain-table th:first-child,
+        .chain-table th:nth-child(2) {
+            text-align: left;
+        }
+
+        .chain-table td {
+            padding: 0.72rem 0.75rem;
+            border-bottom: 1px solid var(--line-soft);
+            color: var(--text-main);
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .chain-table td:first-child,
+        .chain-table td:nth-child(2) {
+            text-align: left;
+        }
+
+        .chain-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+
+        .chain-table tbody tr:hover {
+            background: var(--row-hover);
+        }
+
+        .chain-table tbody tr.chain-itm {
+            background: color-mix(in srgb, var(--warn-bg) 60%, transparent);
+        }
+
+        .chain-positive { color: #00cfa5 !important; }
+        .chain-negative { color: #ff285f !important; }
+        .chain-delta { color: #58a6ff !important; }
+        .chain-iv { color: #c77dff !important; }
+        .chain-pop { color: #15d9c4 !important; }
+        .chain-muted { color: var(--text-muted) !important; }
+
+        .chain-dialog-footer {
+            display: flex;
+            justify-content: flex-end;
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--line-strong);
+        }
+
+        .chain-dialog-close-btn {
+            border-radius: 9px;
+            background: #0969da;
+            color: #ffffff;
+            padding: 0.65rem 1.35rem;
+            font-weight: 800;
+        }
+
+        .chain-dialog-close-btn:hover,
+        .chain-dialog-close-btn:focus-visible {
+            background: #0757b7;
+            outline: 2px solid #ffffff;
+            outline-offset: 2px;
+        }
+
+        @media (max-width: 700px) {
+            #optionChainDialog {
+                width: 100vw;
+                height: 100vh;
+                border: 0;
+                border-radius: 0;
+            }
+
+            .chain-dialog-header,
+            .chain-dialog-content,
+            .chain-dialog-footer {
+                padding-left: 1rem;
+                padding-right: 1rem;
+            }
+
+            .chain-dialog-controls {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .chain-type-tabs {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .chain-type-tab {
+                min-width: 0;
+            }
+
+            .chain-expiration-control {
+                justify-content: space-between;
+            }
+        }
     </style>
 
 </head>
@@ -823,6 +1127,61 @@
 
     </div>
 
+    <dialog id="optionChainDialog" aria-labelledby="optionChainTitle">
+        <div class="chain-dialog-shell">
+            <header class="chain-dialog-header">
+                <div>
+                    <h2 id="optionChainTitle" class="chain-dialog-title">Option Chain</h2>
+                    <p id="optionChainSubtitle" class="chain-dialog-subtitle">Underlying Price: —</p>
+                </div>
+                <button id="optionChainCloseIcon" type="button" class="chain-dialog-close-icon" aria-label="Close option chain">×</button>
+            </header>
+
+            <div class="chain-dialog-content">
+                <div id="chainDialogControls" class="chain-dialog-controls" hidden>
+                    <div class="chain-type-tabs" role="tablist" aria-label="Option type">
+                        <button id="chainCallsTab" type="button" class="chain-type-tab" role="tab" aria-selected="false">Calls (0)</button>
+                        <button id="chainPutsTab" type="button" class="chain-type-tab" role="tab" aria-selected="true">Puts (0)</button>
+                    </div>
+                    <label class="chain-expiration-control" for="chainExpirationSelect">
+                        <span>Expiration:</span>
+                        <select id="chainExpirationSelect"></select>
+                    </label>
+                </div>
+
+                <div id="chainDialogStatus" class="chain-status" role="status" aria-live="polite">
+                    Loading option chain…
+                </div>
+
+                <div id="chainTableWrap" class="chain-table-wrap" hidden>
+                    <table class="chain-table">
+                        <thead>
+                            <tr>
+                                <th scope="col">Expiry</th>
+                                <th scope="col">Strike</th>
+                                <th scope="col">Last Price</th>
+                                <th scope="col">Bid</th>
+                                <th scope="col">Ask</th>
+                                <th scope="col">Spread %</th>
+                                <th scope="col">Change %</th>
+                                <th scope="col">Volume</th>
+                                <th scope="col">Open Interest</th>
+                                <th scope="col">Implied Vol.</th>
+                                <th scope="col">Delta (Δ)</th>
+                                <th scope="col" title="Probability that the short option is profitable at expiry, using bid premium as the collected credit.">Prob. Profit</th>
+                            </tr>
+                        </thead>
+                        <tbody id="chainTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <footer class="chain-dialog-footer">
+                <button id="optionChainCloseButton" type="button" class="chain-dialog-close-btn">Close</button>
+            </footer>
+        </div>
+    </dialog>
+
     <script>
         $(document).ready(function() {
             const bodyEl = document.body;
@@ -832,6 +1191,18 @@
             const densityUltraBtn = document.getElementById('densityUltra');
             const densityCompactBtn = document.getElementById('densityCompact');
             const densityComfortableBtn = document.getElementById('densityComfortable');
+            const optionChainDialog = document.getElementById('optionChainDialog');
+            const optionChainTitle = document.getElementById('optionChainTitle');
+            const optionChainSubtitle = document.getElementById('optionChainSubtitle');
+            const chainDialogControls = document.getElementById('chainDialogControls');
+            const chainDialogStatus = document.getElementById('chainDialogStatus');
+            const chainTableWrap = document.getElementById('chainTableWrap');
+            const chainTableBody = document.getElementById('chainTableBody');
+            const chainCallsTab = document.getElementById('chainCallsTab');
+            const chainPutsTab = document.getElementById('chainPutsTab');
+            const chainExpirationSelect = document.getElementById('chainExpirationSelect');
+            const optionChainCloseIcon = document.getElementById('optionChainCloseIcon');
+            const optionChainCloseButton = document.getElementById('optionChainCloseButton');
             const themeStorageKey = 'optionsWheelTheme';
             const densityStorageKey = 'optionsWheelDensity';
             const optionTypeStorageKey = 'optionsWheelType';
@@ -844,6 +1215,14 @@
 
             let dataTableInstance = null;
             let activeDashboardData = null;
+            let chainData = null;
+            let chainActiveType = 'puts';
+            let chainSelectedExpiration = '';
+            let chainSelectedRow = null;
+            let chainAbortController = null;
+            const chainCache = new Map();
+            const chainCacheTtlMs = 5 * 60 * 1000;
+            const fallbackOptionsApiUrl = 'https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api/yahoo-finance-stock-options';
             let columnWidthsPx = (() => {
                 try {
                     const parsed = JSON.parse(localStorage.getItem(columnWidthsStorageKey) || '{}');
@@ -908,6 +1287,284 @@
             const formatMoney = value => value != null ? Number(value).toFixed(2) : 'N/A';
             const formatPct = (value, digits = 2) => value != null ? `${Number(value).toFixed(digits)}%` : 'N/A';
 
+            const formatChainNumber = (value, minDigits = 2, maxDigits = minDigits) => {
+                const numeric = Number(value);
+                if (value == null || !Number.isFinite(numeric)) {
+                    return '—';
+                }
+                return numeric.toLocaleString(undefined, {
+                    minimumFractionDigits: minDigits,
+                    maximumFractionDigits: maxDigits
+                });
+            };
+
+            const getChainDateParts = value => {
+                if (value == null || value === '') {
+                    return null;
+                }
+                const dateOnly = String(value).match(/^(\d{4})-(\d{2})-(\d{2})/);
+                if (dateOnly) {
+                    return {
+                        year: Number(dateOnly[1]),
+                        month: Number(dateOnly[2]),
+                        day: Number(dateOnly[3])
+                    };
+                }
+                if (typeof value === 'number' || /^\d{10,13}$/.test(String(value))) {
+                    const numeric = Number(value);
+                    const parsed = new Date(numeric < 1e12 ? numeric * 1000 : numeric);
+                    return Number.isNaN(parsed.getTime()) ? null : {
+                        year: parsed.getUTCFullYear(),
+                        month: parsed.getUTCMonth() + 1,
+                        day: parsed.getUTCDate()
+                    };
+                }
+                const parsed = new Date(value);
+                return Number.isNaN(parsed.getTime()) ? null : {
+                    year: parsed.getUTCFullYear(),
+                    month: parsed.getUTCMonth() + 1,
+                    day: parsed.getUTCDate()
+                };
+            };
+
+            const parseChainDate = value => {
+                const parts = getChainDateParts(value);
+                return parts ? new Date(parts.year, parts.month - 1, parts.day, 12) : null;
+            };
+
+            const getChainExpirationInstant = value => {
+                const parts = getChainDateParts(value);
+                return parts ? new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 21)) : null;
+            };
+
+            const formatChainDate = value => {
+                const parsed = parseChainDate(value);
+                return parsed
+                    ? parsed.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' })
+                    : '—';
+            };
+
+            const normalCdf = value => {
+                const sign = value >= 0 ? 1 : -1;
+                const x = Math.abs(value) / Math.sqrt(2);
+                const t = 1 / (1 + 0.3275911 * x);
+                const erf = sign * (1 - (((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x)));
+                return 0.5 * (1 + erf);
+            };
+
+            const getChainUnderlyingPrice = () => {
+                const livePrice = Number(chainData?.quote?.regularMarketPrice);
+                if (Number.isFinite(livePrice) && livePrice > 0) {
+                    return livePrice;
+                }
+                const screenedPrice = Number(chainSelectedRow?.Price);
+                return Number.isFinite(screenedPrice) && screenedPrice > 0 ? screenedPrice : null;
+            };
+
+            const calculateChainRisk = (contract, isCall) => {
+                const price = getChainUnderlyingPrice();
+                const strike = Number(contract.strike);
+                const iv = Number(contract.impliedVolatility);
+                const expiration = getChainExpirationInstant(contract.expiration || chainSelectedExpiration);
+                if (price == null || !Number.isFinite(strike) || strike <= 0 ||
+                    !Number.isFinite(iv) || iv <= 0 || !expiration) {
+                    return { delta: null, pop: null };
+                }
+
+                const tYears = Math.max(
+                    (expiration.getTime() - Date.now()) / (365 * 24 * 60 * 60 * 1000),
+                    1 / (365 * 24 * 60)
+                );
+                const sigmaSqrtT = iv * Math.sqrt(tYears);
+                if (sigmaSqrtT <= 0) {
+                    return { delta: null, pop: null };
+                }
+
+                const riskFreeRate = Number(activeDashboardData?.screening_config?.RISK_FREE_RATE ?? 0.045);
+                const d1 = (Math.log(price / strike) + (riskFreeRate + 0.5 * iv * iv) * tYears) / sigmaSqrtT;
+                const delta = isCall ? normalCdf(d1) : -normalCdf(-d1);
+
+                const bid = Number(contract.bid);
+                const lastPrice = Number(contract.lastPrice);
+                const credit = Number.isFinite(bid) && bid > 0
+                    ? bid
+                    : Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : 0;
+                const breakEven = isCall ? strike + credit : strike - credit;
+                if (breakEven <= 0) {
+                    return { delta, pop: null };
+                }
+
+                const profitZ = (
+                    Math.log(price / breakEven) +
+                    (riskFreeRate - 0.5 * iv * iv) * tYears
+                ) / sigmaSqrtT;
+                const pop = isCall ? normalCdf(-profitZ) : normalCdf(profitZ);
+                return { delta, pop };
+            };
+
+            const getSelectedChainGroup = () => {
+                const groups = Array.isArray(chainData?.options) ? chainData.options : [];
+                return groups.find(group => String(group.expirationDate) === chainSelectedExpiration) || groups[0] || null;
+            };
+
+            const renderOptionChain = () => {
+                const group = getSelectedChainGroup();
+                if (!group) {
+                    chainDialogControls.hidden = true;
+                    chainTableWrap.hidden = true;
+                    chainDialogStatus.hidden = false;
+                    chainDialogStatus.textContent = `No option contracts are available for ${chainSelectedRow?.Symbol || 'this ticker'}.`;
+                    return;
+                }
+
+                chainSelectedExpiration = String(group.expirationDate);
+                const calls = Array.isArray(group.calls) ? group.calls : [];
+                const puts = Array.isArray(group.puts) ? group.puts : [];
+                const contracts = chainActiveType === 'calls' ? calls : puts;
+                const isCall = chainActiveType === 'calls';
+                const currentPrice = getChainUnderlyingPrice();
+
+                chainCallsTab.textContent = `Calls (${calls.length})`;
+                chainCallsTab.setAttribute('aria-selected', isCall ? 'true' : 'false');
+                chainPutsTab.textContent = `Puts (${puts.length})`;
+                chainPutsTab.setAttribute('aria-selected', isCall ? 'false' : 'true');
+                optionChainSubtitle.textContent = `Underlying Price: ${formatChainNumber(currentPrice)}`;
+
+                chainExpirationSelect.value = chainSelectedExpiration;
+                chainTableBody.innerHTML = contracts.map(contract => {
+                    const strike = Number(contract.strike);
+                    const bid = Number(contract.bid);
+                    const ask = Number(contract.ask);
+                    const midpoint = bid > 0 && ask > 0 ? (bid + ask) / 2 : null;
+                    const spreadPct = midpoint > 0 ? ((ask - bid) / midpoint) * 100 : null;
+                    const changePct = Number(contract.percentChange);
+                    const { delta, pop } = calculateChainRisk(contract, isCall);
+                    const isItm = Number.isFinite(currentPrice) && Number.isFinite(strike) &&
+                        (isCall ? strike < currentPrice : strike > currentPrice);
+                    const spreadClass = spreadPct == null ? 'chain-muted' : spreadPct <= 20 ? 'chain-positive' : 'chain-negative';
+                    const changeClass = !Number.isFinite(changePct)
+                        ? 'chain-muted'
+                        : changePct > 0 ? 'chain-positive' : changePct < 0 ? 'chain-negative' : 'chain-muted';
+                    const changeText = Number.isFinite(changePct)
+                        ? `${changePct > 0 ? '+' : ''}${formatChainNumber(changePct)}%`
+                        : '—';
+
+                    return `
+                        <tr class="${isItm ? 'chain-itm' : ''}">
+                            <td>${escapeHtml(formatChainDate(contract.expiration || group.expirationDate))}</td>
+                            <td class="font-bold">${formatChainNumber(strike)}</td>
+                            <td>${formatChainNumber(contract.lastPrice)}</td>
+                            <td class="chain-positive font-bold">${formatChainNumber(contract.bid)}</td>
+                            <td class="chain-negative font-bold">${formatChainNumber(contract.ask)}</td>
+                            <td class="${spreadClass} font-bold">${spreadPct == null ? '—' : `${formatChainNumber(spreadPct, 1, 1)}%`}</td>
+                            <td class="${changeClass}">${changeText}</td>
+                            <td>${formatChainNumber(contract.volume, 0, 0)}</td>
+                            <td>${formatChainNumber(contract.openInterest, 0, 0)}</td>
+                            <td class="chain-iv font-bold">${contract.impliedVolatility == null ? '—' : `${formatChainNumber(Number(contract.impliedVolatility) * 100, 1, 1)}%`}</td>
+                            <td class="chain-delta font-bold">${delta == null ? '—' : formatChainNumber(delta, 2, 2)}</td>
+                            <td class="chain-pop font-bold">${pop == null ? '—' : `${formatChainNumber(pop * 100, 1, 1)}%`}</td>
+                        </tr>
+                    `;
+                }).join('');
+
+                chainDialogStatus.hidden = true;
+                chainDialogControls.hidden = false;
+                chainTableWrap.hidden = false;
+            };
+
+            const setChainExpirationOptions = preferredExpiration => {
+                const groups = Array.isArray(chainData?.options) ? chainData.options : [];
+                chainExpirationSelect.innerHTML = groups.map(group => {
+                    const value = String(group.expirationDate);
+                    return `<option value="${escapeHtml(value)}">${escapeHtml(formatChainDate(value))}</option>`;
+                }).join('');
+
+                const preferredGroup = groups.find(group => {
+                    const groupDate = parseChainDate(group.expirationDate);
+                    const preferredDate = parseChainDate(preferredExpiration);
+                    return groupDate && preferredDate && groupDate.toDateString() === preferredDate.toDateString();
+                });
+                chainSelectedExpiration = String(preferredGroup?.expirationDate ?? groups[0]?.expirationDate ?? '');
+            };
+
+            const showChainError = message => {
+                chainDialogControls.hidden = true;
+                chainTableWrap.hidden = true;
+                chainDialogStatus.hidden = false;
+                chainDialogStatus.innerHTML = `
+                    <div>
+                        <p class="font-bold text-red-500">${escapeHtml(message)}</p>
+                        <button id="chainRetryButton" type="button" class="chain-dialog-close-btn mt-4">Retry</button>
+                    </div>
+                `;
+                document.getElementById('chainRetryButton')?.addEventListener('click', () => loadOptionChain(true));
+            };
+
+            const loadOptionChain = async (forceRefresh = false) => {
+                const symbol = chainSelectedRow?.Symbol;
+                if (!symbol) {
+                    showChainError('Ticker information is unavailable.');
+                    return;
+                }
+
+                chainDialogControls.hidden = true;
+                chainTableWrap.hidden = true;
+                chainDialogStatus.hidden = false;
+                chainDialogStatus.textContent = `Loading option contracts for ${symbol}…`;
+
+                const cached = chainCache.get(symbol);
+                if (!forceRefresh && cached && Date.now() - cached.timestamp < chainCacheTtlMs) {
+                    chainData = cached.data;
+                    setChainExpirationOptions(chainSelectedRow.Expiration);
+                    renderOptionChain();
+                    return;
+                }
+
+                chainAbortController?.abort();
+                chainAbortController = new AbortController();
+                const apiUrl = activeDashboardData?.options_api_url || fallbackOptionsApiUrl;
+                const url = `${apiUrl}?ticker=${encodeURIComponent(symbol)}&limit=50&expirationDatesCount=24`;
+
+                try {
+                    const response = await fetch(url, { signal: chainAbortController.signal });
+                    if (!response.ok) {
+                        throw new Error(`Option service returned HTTP ${response.status}.`);
+                    }
+                    const data = await response.json();
+                    if (!Array.isArray(data?.options)) {
+                        throw new Error('Option service returned an invalid response.');
+                    }
+
+                    chainData = data;
+                    chainCache.set(symbol, { timestamp: Date.now(), data });
+                    setChainExpirationOptions(chainSelectedRow.Expiration);
+                    renderOptionChain();
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error('Error loading option chain:', error);
+                        showChainError(`Could not load the option chain for ${symbol}.`);
+                    }
+                }
+            };
+
+            const openOptionChain = row => {
+                chainSelectedRow = row;
+                chainActiveType = currentOptionType === 'call' ? 'calls' : 'puts';
+                chainData = null;
+                optionChainTitle.textContent = `Option Chain — ${row.Symbol}`;
+                optionChainSubtitle.textContent = `Underlying Price: ${formatChainNumber(row.Price)}`;
+                optionChainDialog.showModal();
+                loadOptionChain();
+            };
+
+            const closeOptionChain = () => {
+                chainAbortController?.abort();
+                chainAbortController = null;
+                if (optionChainDialog.open) {
+                    optionChainDialog.close();
+                }
+            };
+
             const persistColumnWidths = () => {
                 localStorage.setItem(columnWidthsStorageKey, JSON.stringify(columnWidthsPx));
             };
@@ -917,7 +1574,9 @@
 
                 Object.entries(columnWidthsPx).forEach(([rawIndex, rawWidth]) => {
                     const index = Number(rawIndex);
-                    const width = clamp(Number(rawWidth), columnMinWidthPx, columnMaxWidthPx);
+                    const minWidth = index === 1 ? 92 : columnMinWidthPx;
+                    const maxWidth = index === 1 ? 104 : columnMaxWidthPx;
+                    const width = clamp(Number(rawWidth), minWidth, maxWidth);
                     if (!Number.isInteger(index) || index < 1 || Number.isNaN(width)) {
                         return;
                     }
@@ -928,14 +1587,16 @@
                         document.documentElement.style.setProperty('--name-col-width', `${width}px`);
                     }
 
-                    rules.push(`#resultsTable th:nth-child(${index}), #resultsTable td:nth-child(${index}) { min-width: ${width}px; width: ${width}px; }`);
+                    rules.push(`#resultsTable th:nth-child(${index}), #resultsTable td:nth-child(${index}) { min-width: ${width}px; width: ${width}px; max-width: ${width}px; }`);
                 });
 
                 columnWidthStyleEl.textContent = rules.join('\n');
             };
 
             const setColumnWidthPx = (columnIndex, widthPx) => {
-                const safeWidth = Math.round(clamp(Number(widthPx), columnMinWidthPx, columnMaxWidthPx));
+                const minWidth = columnIndex === 1 ? 92 : columnMinWidthPx;
+                const maxWidth = columnIndex === 1 ? 104 : columnMaxWidthPx;
+                const safeWidth = Math.round(clamp(Number(widthPx), minWidth, maxWidth));
                 columnWidthsPx[String(columnIndex)] = safeWidth;
                 applyColumnWidthOverrides();
                 persistColumnWidths();
@@ -1238,7 +1899,12 @@
 
                         return `
                             <tr data-index="${idx}" class="cursor-pointer hover:bg-opacity-50">
-                                <td class="px-4 py-4 font-bold text-blue-600 font-mono" title="${escapeHtml(symbolRaw || 'N/A')}"><a href="${symbolHref}" target="_blank" rel="noopener noreferrer" class="hover:underline">${symbolText}</a></td>
+                                <td class="px-4 py-4 font-bold text-blue-600 font-mono" title="${escapeHtml(symbolRaw || 'N/A')}">
+                                    <div class="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                        <a href="${symbolHref}" target="_blank" rel="noopener noreferrer" class="shrink-0 hover:underline inline-block w-16 whitespace-nowrap">${symbolText}</a>
+                                        <button type="button" class="option-chain-btn" data-index="${idx}" aria-label="View option chain for ${escapeHtml(symbolRaw)}" title="View option chain for ${escapeHtml(symbolRaw)}">⌥</button>
+                                    </div>
+                                </td>
                                 <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${nameText}">${nameText}</td>
                                 <td class="px-4 py-4" data-order="${isPass ? 0 : 1}">
                                     <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${isPass ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}">
@@ -1755,6 +2421,40 @@
                 renderPayoffChart(`payoff-chart-${escapedSymbol}-${escapedStrike}`, r);
                 renderThetaChart(`theta-chart-${escapedSymbol}-${escapedStrike}`, r);
             };
+
+            chainCallsTab.addEventListener('click', () => {
+                chainActiveType = 'calls';
+                renderOptionChain();
+            });
+            chainPutsTab.addEventListener('click', () => {
+                chainActiveType = 'puts';
+                renderOptionChain();
+            });
+            chainExpirationSelect.addEventListener('change', event => {
+                chainSelectedExpiration = event.target.value;
+                renderOptionChain();
+            });
+            optionChainCloseIcon.addEventListener('click', closeOptionChain);
+            optionChainCloseButton.addEventListener('click', closeOptionChain);
+            optionChainDialog.addEventListener('cancel', event => {
+                event.preventDefault();
+                closeOptionChain();
+            });
+            optionChainDialog.addEventListener('click', event => {
+                if (event.target === optionChainDialog) {
+                    closeOptionChain();
+                }
+            });
+
+            $('#resultsTable tbody').on('click', '.option-chain-btn', function(event) {
+                event.preventDefault();
+                event.stopPropagation();
+                const idx = Number($(this).data('index'));
+                const row = activeDashboardData?.results?.[idx];
+                if (row) {
+                    openOptionChain(row);
+                }
+            });
 
             // Register Delegated Table Row Click listener once
             $('#resultsTable tbody').on('click', 'tr[data-index]', function(e) {

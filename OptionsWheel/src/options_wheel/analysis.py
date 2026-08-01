@@ -419,7 +419,7 @@ _error_stats = {
     "empty_contract_sets": 0,
     "symbol_analysis_exceptions": 0,
     "contracts_excluded_earnings": 0,
-    "contracts_excluded_missing_spread": 0,
+    "contracts_excluded_missing_quote": 0,
 }
 
 
@@ -513,8 +513,8 @@ def print_error_summary():
         ("Symbols with no contracts", stats["empty_contract_sets"]),
         ("Contracts excluded for earnings", stats["contracts_excluded_earnings"]),
         (
-            "Contracts excluded for missing spread",
-            stats["contracts_excluded_missing_spread"],
+            "Contracts excluded for missing two-sided quote",
+            stats["contracts_excluded_missing_quote"],
         ),
         ("Worker analysis exceptions", stats["symbol_analysis_exceptions"]),
     ]
@@ -1184,7 +1184,6 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
     strike = _to_float(option.get("strike"))
     bid = _to_float(option.get("bid"))
     ask = _to_float(option.get("ask"))
-    last_price = _to_float(option.get("lastPrice"))
     implied_volatility = _to_float(option.get("impliedVolatility"))
     delta = _to_float(option.get("delta"))
     open_interest = int(_to_float(option.get("openInterest")) or 0)
@@ -1193,25 +1192,22 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
     if strike is None or strike <= 0:
         return None
 
-    premium = None
-    net_premium = None
-    price_source = None
-    spread_pct = None
-    spread_abs = None
-    if bid is not None and ask is not None and bid > 0 and ask > 0 and ask >= bid:
-        premium, net_premium, spread_pct = net_credit(
-            bid,
-            ask,
-            commission_per_contract=COMMISSION_PER_CONTRACT,
-            slippage_pct_of_spread=SLIPPAGE_PCT_OF_SPREAD,
-            round_trip=False,
-        )
-        spread_abs = ask - bid
-        price_source = "mid"
-    elif last_price is not None and last_price > 0:
-        premium = last_price
-        net_premium = max(last_price - (COMMISSION_PER_CONTRACT / 100.0), 0.0)
-        price_source = "last"
+    # A two-sided quote is mandatory: without a live bid there is nothing to sell
+    # into, and lastPrice carries no spread information so the spread filters
+    # below could not be applied.
+    if bid is None or ask is None or bid <= 0 or ask <= 0 or ask < bid:
+        _bump_error_stat("contracts_excluded_missing_quote")
+        return None
+
+    premium, net_premium, spread_pct = net_credit(
+        bid,
+        ask,
+        commission_per_contract=COMMISSION_PER_CONTRACT,
+        slippage_pct_of_spread=SLIPPAGE_PCT_OF_SPREAD,
+        round_trip=False,
+    )
+    spread_abs = ask - bid
+    price_source = "mid"
 
     if premium is None or premium <= 0:
         return None
@@ -1300,8 +1296,7 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
     }
     if spread_pct is not None:
         checks[f"Spread <= {MAX_SPREAD_PCT}%"] = spread_pct <= MAX_SPREAD_PCT
-    if spread_abs is not None:
-        checks[f"Spread <= ${MAX_SPREAD_ABS:.2f}"] = spread_abs <= MAX_SPREAD_ABS
+    checks[f"Spread <= ${MAX_SPREAD_ABS:.2f}"] = spread_abs <= MAX_SPREAD_ABS
 
     if delta is not None:
         abs_delta = abs(delta)
@@ -1410,9 +1405,14 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
         now_dt=now_dt,
         dte_fn=_dte_from_expiration,
     )
+    # Put and call ATM IV differ because of skew, so each option type keeps its
+    # own series; otherwise the second scan of the day overwrites the first.
+    iv_history_key = f"{symbol}|{option_type}"
     if CURRENT_SCAN_DATE:
-        IV_HISTORY_STORE.record(symbol, CURRENT_SCAN_DATE, atm_iv)
-    iv_rank, iv_percentile, iv_observation_count = IV_HISTORY_STORE.rank(symbol, atm_iv)
+        IV_HISTORY_STORE.record(iv_history_key, CURRENT_SCAN_DATE, atm_iv)
+    iv_rank, iv_percentile, iv_observation_count = IV_HISTORY_STORE.rank(
+        iv_history_key, atm_iv
+    )
 
     # First pass: evaluate contracts without indicator enrichment.
     # Only keep potential PASS (0 failures) or NEAR (1 failure) candidates.

@@ -436,7 +436,9 @@
         #resultsTable th:nth-child(19),
         #resultsTable td:nth-child(19),
         #resultsTable th:nth-child(22),
-        #resultsTable td:nth-child(22) {
+        #resultsTable td:nth-child(22),
+        #resultsTable th:nth-child(23),
+        #resultsTable td:nth-child(23) {
             border-left: 2px solid var(--group-divider) !important;
         }
 
@@ -1052,8 +1054,10 @@
             <div class="bg-white p-2 rounded-xl shadow-sm border border-gray-100 animate-pulse h-14"></div>
             <div class="bg-white p-2 rounded-xl shadow-sm border border-gray-100 animate-pulse h-14"></div>
             <div class="bg-white p-2 rounded-xl shadow-sm border border-gray-100 animate-pulse h-14"></div>
-            <div class="bg-white p-2 rounded-xl shadow-sm border border-gray-100 animate-pulse h-14"></div>
         </div>
+
+        <!-- Suggested Portfolio -->
+        <div id="portfolioPanel" class="hidden dashboard-shell mb-4"></div>
 
         <!-- Main Table -->
         <div class="dashboard-shell">
@@ -1115,7 +1119,12 @@
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="TECHNICALS" title="RSI(14): Relative Strength Index. Below 30 = oversold, above 70 = overbought.">RSI</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="ADX(14): Average Directional Index. Above 25 = strong trend.">ADX</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Price distance from EMA50 in percent. Negative = below EMA50.">Diff%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="COMPOSITE" title="Composite ranking score: yield + OTM distance + liquidity (OI/volume) + spread quality + DTE fit + IV. Higher is better.">Score</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="COMPOSITE" title="Composite ranking score: yield + OTM distance + liquidity (OI/volume) + spread quality + DTE fit + variance risk premium. Higher is better.">Score</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="NET/RISK" title="Premium net of commission and assumed slippage from mid. Yields are computed from this, not from the mid price.">Net Prem</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="True IV Rank (0-1): where today's ATM implied volatility sits inside its own recorded 1-year range. Empty until enough scan history has accumulated, in which case IVHVPct is used instead.">IVRank</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Variance risk premium: implied volatility divided by forecast (realized-based) volatility. Above ~1.2 means the option is priced well above what the stock has actually been moving.">VRP</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Distance from spot to strike in standard deviations of the forecast volatility. Comparable across tickers, unlike OTM%.">SigmaDist</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Net credit divided by the expected assignment loss under the forecast volatility. Higher = more credit per unit of tail risk.">Cr/Risk</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody" class="divide-y divide-gray-200">
@@ -1286,6 +1295,69 @@
 
             const formatMoney = value => value != null ? Number(value).toFixed(2) : 'N/A';
             const formatPct = (value, digits = 2) => value != null ? `${Number(value).toFixed(digits)}%` : 'N/A';
+
+            const renderPortfolio = portfolio => {
+                const panel = document.getElementById('portfolioPanel');
+                if (!panel) return;
+                const positions = (portfolio && portfolio.positions) || [];
+                if (!positions.length) {
+                    panel.classList.add('hidden');
+                    panel.innerHTML = '';
+                    return;
+                }
+
+                const money = value => value != null
+                    ? `$${Number(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                    : 'N/A';
+                const constraints = portfolio.constraints || {};
+                const rows = positions.map(p => `
+                    <tr>
+                        <td class="px-3 py-2 font-semibold">${escapeHtml(p.Symbol ?? 'N/A')}</td>
+                        <td class="px-3 py-2 text-gray-600">${escapeHtml(p.Sector ?? '—')}</td>
+                        <td class="px-3 py-2 font-mono text-right">${formatMoney(p.Strike)}</td>
+                        <td class="px-3 py-2 font-mono">${escapeHtml(p.Expiration ?? 'N/A')}</td>
+                        <td class="px-3 py-2 font-mono text-right">${p.DTE ?? 'N/A'}</td>
+                        <td class="px-3 py-2 font-mono text-right">${formatMoney(p.NetPremium)}</td>
+                        <td class="px-3 py-2 font-mono text-right">${money(p.Collateral)}</td>
+                        <td class="px-3 py-2 font-mono text-right text-emerald-600">${money(p.Credit)}</td>
+                        <td class="px-3 py-2 font-mono text-right">${formatPct(p.MonthlyYieldPct)}</td>
+                        <td class="px-3 py-2 font-mono text-right">${p.Score != null ? Number(p.Score).toFixed(2) : 'N/A'}</td>
+                    </tr>
+                `).join('');
+
+                panel.innerHTML = `
+                    <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                        <h2 class="text-lg font-black text-gray-800">Suggested portfolio</h2>
+                        <div class="flex flex-wrap gap-3 text-xs text-gray-500">
+                            <span>${portfolio.position_count} positions</span>
+                            <span>Collateral: ${money(portfolio.total_collateral)}</span>
+                            <span>Credit: ${money(portfolio.total_credit)}</span>
+                            <span>Weighted yield: ${formatPct(portfolio.weighted_monthly_yield_pct)}/mo</span>
+                            <span>Max/sector: ${constraints.PORTFOLIO_MAX_PER_SECTOR ?? 'N/A'}${portfolio.sector_map_available ? '' : ' (no sectors.json)'}</span>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-sm">
+                            <thead class="text-xs uppercase tracking-wider text-gray-500 border-b border-gray-200">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">Symbol</th>
+                                    <th class="px-3 py-2 text-left">Sector</th>
+                                    <th class="px-3 py-2 text-right">Strike</th>
+                                    <th class="px-3 py-2 text-left">Exp</th>
+                                    <th class="px-3 py-2 text-right">DTE</th>
+                                    <th class="px-3 py-2 text-right">Net Prem</th>
+                                    <th class="px-3 py-2 text-right">Collateral</th>
+                                    <th class="px-3 py-2 text-right">Credit</th>
+                                    <th class="px-3 py-2 text-right">Mo Yield%</th>
+                                    <th class="px-3 py-2 text-right">Score</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">${rows}</tbody>
+                        </table>
+                    </div>
+                `;
+                panel.classList.remove('hidden');
+            };
 
             const formatChainNumber = (value, minDigits = 2, maxDigits = minDigits) => {
                 const numeric = Number(value);
@@ -1758,6 +1830,8 @@
                         </div>
                     `).join('');
 
+                    renderPortfolio(data.portfolio);
+
                     // Populate Table
                     const tableBody = document.getElementById('tableBody');
                     tableBody.innerHTML = data.results.map((r, idx) => {
@@ -1862,8 +1936,35 @@
                             popClass = popVal >= 80 ? 'text-emerald-600 font-semibold' : popVal >= 70 ? 'text-amber-600' : 'text-red-600';
                             popText = `${popVal.toFixed(1)}%`;
                         }
-                        const exDivDate = r.ExDividendDate;
-                        const exDivRisk = r.ExDivRisk || 'NONE';
+
+                        const ivRankVal = r.IVRank;
+                        const ivRankClass = ivRankVal == null
+                            ? 'text-gray-500'
+                            : ivRankVal >= 0.5
+                                ? 'text-emerald-600 font-semibold'
+                                : ivRankVal >= 0.3
+                                    ? 'text-amber-600'
+                                    : 'text-red-600';
+
+                        const vrpVal = r.VRPRatio;
+                        const vrpClass = vrpVal == null
+                            ? 'text-gray-500'
+                            : vrpVal >= 1.2
+                                ? 'text-emerald-600 font-semibold'
+                                : vrpVal >= 1.0
+                                    ? 'text-amber-600'
+                                    : 'text-red-600';
+
+                        const creditRiskVal = r.CreditRiskRatio;
+                        const creditRiskClass = creditRiskVal == null
+                            ? 'text-gray-500'
+                            : creditRiskVal >= 1.0
+                                ? 'text-emerald-600 font-semibold'
+                                : creditRiskVal >= 0.6
+                                    ? 'text-amber-600'
+                                    : 'text-red-600';
+
+                        const exDivDate = r.ExDividendDate;                        const exDivRisk = r.ExDivRisk || 'NONE';
 
                         let exDivHtml = '';
                         if (exDivDate) {
@@ -1938,6 +2039,11 @@
                                 <td class="px-4 py-4 font-mono text-right ${r.ADX != null && r.ADX > 25 ? 'text-amber-600 font-semibold' : 'text-gray-600'}">${r.ADX != null ? r.ADX.toFixed(1) : 'N/A'}</td>
                                 <td class="px-4 py-4 font-mono text-right ${r.DiffPct != null && r.DiffPct < -5 ? 'text-red-600' : r.DiffPct != null && r.DiffPct > 5 ? 'text-emerald-600' : 'text-gray-600'}">${r.DiffPct != null ? r.DiffPct.toFixed(1) + '%' : 'N/A'}</td>
                                 <td class="px-4 py-4 font-mono font-semibold ${scoreClass} text-right">${r.Score != null ? r.Score.toFixed(2) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.NetPremium)}</td>
+                                <td class="px-4 py-4 font-mono text-right ${ivRankClass}">${r.IVRank != null ? Number(r.IVRank).toFixed(2) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-right ${vrpClass}">${r.VRPRatio != null ? Number(r.VRPRatio).toFixed(2) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-right text-gray-600">${r.SigmaDistance != null ? Number(r.SigmaDistance).toFixed(2) : 'N/A'}</td>
+                                <td class="px-4 py-4 font-mono text-right ${creditRiskClass}">${r.CreditRiskRatio != null ? Number(r.CreditRiskRatio).toFixed(2) : 'N/A'}</td>
                             </tr>
                         `;
                     }).join('');
@@ -2126,7 +2232,7 @@
                                         <td><span class="strike-pill">$${Number(alt.Strike).toFixed(2)}</span></td>
                                         <td>${alt.DTE}d</td>
                                         <td>$${Number(alt.Premium).toFixed(2)}</td>
-                                        <td class="font-bold text-emerald-600">${Number(alt.MonthlyYieldPct).toFixed(2)}%</td>
+                                        <td class="font-bold text-emerald-600">${alt.MonthlyYieldPct != null ? Number(alt.MonthlyYieldPct).toFixed(2) + '%' : 'N/A'}</td>
                                         <td>${alt.Delta != null ? Number(alt.Delta).toFixed(3) : 'N/A'}</td>
                                         <td class="font-bold text-blue-500">${Number(alt.Score).toFixed(1)}</td>
                                     </tr>
@@ -2147,7 +2253,7 @@
 
                 return `
                     <tr class="details-tr">
-                        <td colspan="20">
+                        <td colspan="27">
                             <div class="details-panel">
                                 <div class="details-grid">
                                     <!-- Column 1: Payoff Chart -->

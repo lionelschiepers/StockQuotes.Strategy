@@ -51,7 +51,10 @@ MIN_OPEN_INTEREST: 100
 MIN_VOLUME: 5
 
 # Maximum bid/ask spread as a percentage of the mid-price
-MAX_SPREAD_PCT: 20.0
+MAX_SPREAD_PCT: 10.0
+
+# Maximum absolute bid/ask spread in USD
+MAX_SPREAD_ABS: 0.25
 
 # ── Result set limits ──────────────────────────────────────────────────────────
 
@@ -69,10 +72,22 @@ OPTIONS_REQUEST_TIMEOUT: 25
 # Number of times to retry a failed API request before giving up
 OPTIONS_MAX_RETRIES: 3
 
+# Expected broker commission in USD per contract (one-way)
+COMMISSION_PER_CONTRACT: 0.65
+
+# Fill assumption: percentage of the half-spread conceded from mid-price
+SLIPPAGE_PCT_OF_SPREAD: 30.0
+
 # ── Pricing model ──────────────────────────────────────────────────────────────
 
 # Risk-free rate used in Black-Scholes (e.g. 0.045 = 4.5%)
 RISK_FREE_RATE: 0.045
+
+# Weight given to realised volatility versus haircut IV in forecast volatility
+FORECAST_HV_WEIGHT: 0.5
+
+# Haircut applied to IV before blending it into forecast volatility
+FORECAST_IV_HAIRCUT: 0.85
 
 # ── Volatility filter ─────────────────────────────────────────────────────────
 
@@ -110,3 +125,17 @@ SCORE_WEIGHT_DTE: 10
 
 # Weight given to implied volatility rank
 SCORE_WEIGHT_IV: 10
+
+# ── Portfolio construction ─────────────────────────────────────────────────────
+
+# Maximum number of contracts to include in the suggested portfolio
+PORTFOLIO_MAX_POSITIONS: 10
+
+# Maximum number of positions per sector (requires data/input/sectors.json)
+PORTFOLIO_MAX_PER_SECTOR: 2
+
+# Total collateral budget in USD (0 = unlimited)
+PORTFOLIO_COLLATERAL_BUDGET: 0.0
+
+# Maximum percentage of the budget allowed in a single position
+PORTFOLIO_MAX_PCT_PER_POSITION: 25.0

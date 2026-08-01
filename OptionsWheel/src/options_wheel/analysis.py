@@ -14,11 +14,30 @@ import random
 import argparse
 import traceback
 
+from options_wheel.iv_history import IVHistoryStore, extract_atm_iv
+from options_wheel.metrics import (
+    collateral_per_share,
+    credit_risk_ratio,
+    expected_itm_payoff,
+    forecast_volatility,
+    max_monthly_yield_for_delta,
+    net_credit,
+    option_delta,
+    probability_of_profit,
+    sigma_distance,
+    simple_yields,
+    variance_risk_premium,
+    years_to_expiration,
+)
+from options_wheel.outcomes import archive_scan
+from options_wheel.portfolio import build_portfolio, load_sector_map
+
 MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(MODULE_DIR, "..", ".."))
 CONFIG_DIR = os.path.join(PROJECT_ROOT, "config")
 DATA_INPUT_DIR = os.path.join(PROJECT_ROOT, "data", "input")
 DATA_OUTPUT_DIR = os.path.join(PROJECT_ROOT, "data", "output")
+DATA_HISTORY_DIR = os.path.join(PROJECT_ROOT, "data", "history")
 
 
 def convert_numpy_types(obj):
@@ -45,17 +64,21 @@ class NumpyEncoder(json.JSONEncoder):
 # Configuration
 BATCH_SIZE = 50
 HIST_DAYS = 365
-#BASE_URL = "http://localhost:7071/api/yahoo-finance"
-#HIST_URL = "http://localhost:7071/api/yahoo-finance-historical"
-#OPTIONS_URL = "http://localhost:7071/api/yahoo-finance-stock-options"
+DEFAULT_API_BASE = "https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api"
 
-#BASE_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance"
-#HIST_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-historical"
-#OPTIONS_URL = "https://stockquote.lionelschiepers.synology.me/api/yahoo-finance-stock-options"
 
-BASE_URL = "https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api/yahoo-finance"
-HIST_URL = "https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api/yahoo-finance-historical"
-OPTIONS_URL = "https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api/yahoo-finance-stock-options"
+def _default_endpoint(path_suffix):
+    api_base = os.environ.get("OW_API_BASE")
+    if api_base:
+        return f"{api_base.rstrip('/')}/{path_suffix}"
+    return f"{DEFAULT_API_BASE}/{path_suffix}"
+
+
+BASE_URL = os.environ.get("OW_BASE_URL", _default_endpoint("yahoo-finance"))
+HIST_URL = os.environ.get("OW_HIST_URL", _default_endpoint("yahoo-finance-historical"))
+OPTIONS_URL = os.environ.get(
+    "OW_OPTIONS_URL", _default_endpoint("yahoo-finance-stock-options")
+)
 
 SLEEP_TIME = 0.0
 MAX_WORKERS = 4
@@ -116,18 +139,27 @@ DEFAULT_SCREENING_CONFIG = {
     "MIN_OTM_PCT": 5.0,
     "MIN_OPEN_INTEREST": 100,
     "MIN_VOLUME": 10,
-    "MAX_SPREAD_PCT": 20.0,
+    "MAX_SPREAD_PCT": 10.0,
     "MIN_ABS_DELTA": 0.0,
     "MAX_ABS_DELTA": 0.11,
     "MAX_EXPIRATIONS_PER_SYMBOL": 3,
     "MAX_CONTRACTS_PER_SYMBOL": 3,
     "OPTIONS_REQUEST_TIMEOUT": 25,
     "OPTIONS_MAX_RETRIES": 8,
+    "COMMISSION_PER_CONTRACT": 0.65,
+    "SLIPPAGE_PCT_OF_SPREAD": 30.0,
+    "MAX_SPREAD_ABS": 0.25,
     "RISK_FREE_RATE": 0.045,
     "DIVIDEND_YIELD": 0.0,
     "MIN_IV_RANK": 0.0,
     "FILTER_DOWNTRENDS": True,
     "FILTER_UPTRENDS": True,
+    "FORECAST_HV_WEIGHT": 0.5,
+    "FORECAST_IV_HAIRCUT": 0.85,
+    "PORTFOLIO_MAX_POSITIONS": 10,
+    "PORTFOLIO_MAX_PER_SECTOR": 2,
+    "PORTFOLIO_COLLATERAL_BUDGET": 0.0,
+    "PORTFOLIO_MAX_PCT_PER_POSITION": 25.0,
     "SCORE_WEIGHT_YIELD": 30,
     "SCORE_WEIGHT_OTM": 20,
     "SCORE_WEIGHT_OI": 15,
@@ -248,6 +280,12 @@ def validate_screening_config(cfg):
         errors.append("OPTIONS_REQUEST_TIMEOUT must be in [3, 120].")
     if cfg["OPTIONS_MAX_RETRIES"] < 1 or cfg["OPTIONS_MAX_RETRIES"] > 20:
         errors.append("OPTIONS_MAX_RETRIES must be in [1, 20].")
+    if cfg["COMMISSION_PER_CONTRACT"] < 0 or cfg["COMMISSION_PER_CONTRACT"] > 25:
+        errors.append("COMMISSION_PER_CONTRACT must be in [0, 25].")
+    if cfg["SLIPPAGE_PCT_OF_SPREAD"] < 0 or cfg["SLIPPAGE_PCT_OF_SPREAD"] > 100:
+        errors.append("SLIPPAGE_PCT_OF_SPREAD must be in [0, 100].")
+    if cfg["MAX_SPREAD_ABS"] <= 0 or cfg["MAX_SPREAD_ABS"] > 25:
+        errors.append("MAX_SPREAD_ABS must be in (0, 25].")
     if cfg["RISK_FREE_RATE"] < -0.05 or cfg["RISK_FREE_RATE"] > 0.25:
         errors.append("RISK_FREE_RATE must be in [-0.05, 0.25].")
     if cfg["DIVIDEND_YIELD"] < 0 or cfg["DIVIDEND_YIELD"] > 0.25:
@@ -266,6 +304,22 @@ def validate_screening_config(cfg):
 
     if not isinstance(cfg["EXCLUDE_EARNINGS_BEFORE_EXPIRY"], bool):
         errors.append("EXCLUDE_EARNINGS_BEFORE_EXPIRY must be true/false.")
+
+    if cfg["FORECAST_HV_WEIGHT"] < 0 or cfg["FORECAST_HV_WEIGHT"] > 1:
+        errors.append("FORECAST_HV_WEIGHT must be in [0, 1].")
+    if cfg["FORECAST_IV_HAIRCUT"] <= 0 or cfg["FORECAST_IV_HAIRCUT"] > 2:
+        errors.append("FORECAST_IV_HAIRCUT must be in (0, 2].")
+    if cfg["PORTFOLIO_MAX_POSITIONS"] < 0 or cfg["PORTFOLIO_MAX_POSITIONS"] > 100:
+        errors.append("PORTFOLIO_MAX_POSITIONS must be in [0, 100].")
+    if cfg["PORTFOLIO_MAX_PER_SECTOR"] < 0 or cfg["PORTFOLIO_MAX_PER_SECTOR"] > 100:
+        errors.append("PORTFOLIO_MAX_PER_SECTOR must be in [0, 100].")
+    if cfg["PORTFOLIO_COLLATERAL_BUDGET"] < 0:
+        errors.append("PORTFOLIO_COLLATERAL_BUDGET must be >= 0.")
+    if (
+        cfg["PORTFOLIO_MAX_PCT_PER_POSITION"] < 0
+        or cfg["PORTFOLIO_MAX_PCT_PER_POSITION"] > 100
+    ):
+        errors.append("PORTFOLIO_MAX_PCT_PER_POSITION must be in [0, 100].")
 
     for weight_key in (
         "SCORE_WEIGHT_YIELD", "SCORE_WEIGHT_OTM", "SCORE_WEIGHT_OI",
@@ -289,7 +343,11 @@ def init_screening_config(option_type="put"):
     global MIN_OPEN_INTEREST, MIN_VOLUME, MAX_SPREAD_PCT, MIN_ABS_DELTA, MAX_ABS_DELTA
     global MAX_EXPIRATIONS_PER_SYMBOL, MAX_CONTRACTS_PER_SYMBOL
     global OPTIONS_REQUEST_TIMEOUT, OPTIONS_MAX_RETRIES
+    global COMMISSION_PER_CONTRACT, SLIPPAGE_PCT_OF_SPREAD, MAX_SPREAD_ABS
     global RISK_FREE_RATE, DIVIDEND_YIELD, MIN_IV_RANK, FILTER_DOWNTRENDS, FILTER_UPTRENDS
+    global FORECAST_HV_WEIGHT, FORECAST_IV_HAIRCUT
+    global PORTFOLIO_MAX_POSITIONS, PORTFOLIO_MAX_PER_SECTOR
+    global PORTFOLIO_COLLATERAL_BUDGET, PORTFOLIO_MAX_PCT_PER_POSITION
     global SCORE_WEIGHT_YIELD, SCORE_WEIGHT_OTM, SCORE_WEIGHT_OI
     global SCORE_WEIGHT_VOLUME, SCORE_WEIGHT_SPREAD, SCORE_WEIGHT_DTE, SCORE_WEIGHT_IV
 
@@ -315,11 +373,20 @@ def init_screening_config(option_type="put"):
     MAX_CONTRACTS_PER_SYMBOL = SCREENING_CONFIG["MAX_CONTRACTS_PER_SYMBOL"]
     OPTIONS_REQUEST_TIMEOUT = SCREENING_CONFIG["OPTIONS_REQUEST_TIMEOUT"]
     OPTIONS_MAX_RETRIES = SCREENING_CONFIG["OPTIONS_MAX_RETRIES"]
+    COMMISSION_PER_CONTRACT = SCREENING_CONFIG["COMMISSION_PER_CONTRACT"]
+    SLIPPAGE_PCT_OF_SPREAD = SCREENING_CONFIG["SLIPPAGE_PCT_OF_SPREAD"]
+    MAX_SPREAD_ABS = SCREENING_CONFIG["MAX_SPREAD_ABS"]
     RISK_FREE_RATE = SCREENING_CONFIG["RISK_FREE_RATE"]
     DIVIDEND_YIELD = SCREENING_CONFIG["DIVIDEND_YIELD"]
     MIN_IV_RANK = SCREENING_CONFIG["MIN_IV_RANK"]
     FILTER_DOWNTRENDS = SCREENING_CONFIG["FILTER_DOWNTRENDS"]
     FILTER_UPTRENDS = SCREENING_CONFIG.get("FILTER_UPTRENDS", True)
+    FORECAST_HV_WEIGHT = SCREENING_CONFIG["FORECAST_HV_WEIGHT"]
+    FORECAST_IV_HAIRCUT = SCREENING_CONFIG["FORECAST_IV_HAIRCUT"]
+    PORTFOLIO_MAX_POSITIONS = SCREENING_CONFIG["PORTFOLIO_MAX_POSITIONS"]
+    PORTFOLIO_MAX_PER_SECTOR = SCREENING_CONFIG["PORTFOLIO_MAX_PER_SECTOR"]
+    PORTFOLIO_COLLATERAL_BUDGET = SCREENING_CONFIG["PORTFOLIO_COLLATERAL_BUDGET"]
+    PORTFOLIO_MAX_PCT_PER_POSITION = SCREENING_CONFIG["PORTFOLIO_MAX_PCT_PER_POSITION"]
     SCORE_WEIGHT_YIELD = SCREENING_CONFIG["SCORE_WEIGHT_YIELD"]
     SCORE_WEIGHT_OTM = SCREENING_CONFIG["SCORE_WEIGHT_OTM"]
     SCORE_WEIGHT_OI = SCREENING_CONFIG["SCORE_WEIGHT_OI"]
@@ -331,6 +398,10 @@ def init_screening_config(option_type="put"):
 
 # Default initialization (for backward compatibility when imported)
 init_screening_config("put")
+
+IV_HISTORY_PATH = os.path.join(DATA_HISTORY_DIR, "iv_history.json")
+IV_HISTORY_STORE = IVHistoryStore(IV_HISTORY_PATH).load()
+CURRENT_SCAN_DATE = None
 
 _thread_local = threading.local()
 _rate_limit_lock = threading.Lock()
@@ -690,7 +761,7 @@ def calculate_rvi(series, std_period=10, smooth_period=14):
 
 
 def fetch_historical_indicators(symbol):
-    """Fetch historical prices and compute EMA50, RSI, ADX, RVI, MACD, and HV-based IV rank data."""
+    """Fetch historical prices and compute technical + realised-volatility data."""
     from datetime import datetime, timedelta
 
     to_date = datetime.now().strftime("%Y-%m-%d")
@@ -734,12 +805,18 @@ def fetch_historical_indicators(symbol):
     # Compute historical volatility (annualized) for IV rank comparison
     log_returns = np.log(close / close.shift(1)).dropna()
     hv_current = log_returns[-20:].std() * np.sqrt(252)  # 20-day HV
+    hv_long = log_returns[-60:].std() * np.sqrt(252) if len(log_returns) >= 60 else hv_current
     hv_high = log_returns.rolling(20).std().max() * np.sqrt(
         252
     )  # max 20-day HV in period
     hv_low = log_returns.rolling(20).std().min() * np.sqrt(
         252
     )  # min 20-day HV in period
+    realized_drift = log_returns.mean() * 252
+    if not np.isnan(realized_drift):
+        realized_drift = float(np.clip(realized_drift, -0.25, 0.25))
+    else:
+        realized_drift = None
 
     return {
         "ema50": float(ema50) if not np.isnan(ema50) else None,
@@ -750,8 +827,10 @@ def fetch_historical_indicators(symbol):
         "signal": float(signal_val) if not np.isnan(signal_val) else None,
         "price": float(close.iloc[-1]),
         "hv_current": float(hv_current) if not np.isnan(hv_current) else None,
+        "hv_long": float(hv_long) if not np.isnan(hv_long) else None,
         "hv_high": float(hv_high) if not np.isnan(hv_high) else None,
         "hv_low": float(hv_low) if not np.isnan(hv_low) else None,
+        "realized_drift": realized_drift,
     }
 
 
@@ -942,6 +1021,37 @@ def _years_to_expiration(expiration_dt, now_dt):
     return max(seconds / (365.0 * 24.0 * 60.0 * 60.0), 1.0 / (365.0 * 24.0 * 60.0))
 
 
+def _score_variance_risk_premium(vrp_ratio):
+    if vrp_ratio is None:
+        return 0.0
+    scaled = (vrp_ratio - 1.0) / 0.2
+    return max(0.0, min(scaled, 1.0)) * SCORE_WEIGHT_IV
+
+
+def _real_world_drift(indicators):
+    drift = None
+    if indicators:
+        drift = indicators.get("realized_drift")
+    if drift is None:
+        return 0.0
+    return max(-0.25, min(0.25, drift))
+
+
+def _warn_if_config_is_overconstrained(cfg, option_type):
+    plausible_yield = max_monthly_yield_for_delta(
+        max(cfg["MAX_ABS_DELTA"], 0.01),
+        max(cfg["MIN_DTE"], 30),
+        implied_vol=0.40,
+        risk_free_rate=cfg["RISK_FREE_RATE"],
+    )
+    if plausible_yield is not None and cfg["TARGET_MONTHLY_YIELD_PCT"] > plausible_yield * 1.2:
+        print(
+            f"Warning: {option_type.upper()} config asks for "
+            f"{cfg['TARGET_MONTHLY_YIELD_PCT']:.2f}%/mo at |delta|<={cfg['MAX_ABS_DELTA']:.2f}; "
+            "that is likely very selective unless IV is unusually elevated."
+        )
+
+
 def _estimate_delta(
     price,
     strike,
@@ -1084,20 +1194,28 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
         return None
 
     premium = None
+    net_premium = None
+    price_source = None
     spread_pct = None
+    spread_abs = None
     if bid is not None and ask is not None and bid > 0 and ask > 0 and ask >= bid:
-        premium = (bid + ask) / 2
-        spread = ask - bid
-        if premium > 0:
-            spread_pct = (spread / premium) * 100
+        premium, net_premium, spread_pct = net_credit(
+            bid,
+            ask,
+            commission_per_contract=COMMISSION_PER_CONTRACT,
+            slippage_pct_of_spread=SLIPPAGE_PCT_OF_SPREAD,
+            round_trip=False,
+        )
+        spread_abs = ask - bid
+        price_source = "mid"
     elif last_price is not None and last_price > 0:
         premium = last_price
+        net_premium = max(last_price - (COMMISSION_PER_CONTRACT / 100.0), 0.0)
+        price_source = "last"
 
     if premium is None or premium <= 0:
         return None
-
-    if spread_pct is None:
-        _bump_error_stat("contracts_excluded_missing_spread")
+    if net_premium is None or net_premium <= 0:
         return None
 
     expiration = expiration_dt or _parse_expiration(option.get("expiration"))
@@ -1118,28 +1236,16 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
 
     per_stock_div_yield = symbol_data.get("dividend_yield", DIVIDEND_YIELD)
     if delta is None:
-        delta = _estimate_delta(
+        t_years = years_to_expiration(expiration, now_dt)
+        delta = option_delta(
             price,
             strike,
             implied_volatility,
-            expiration,
-            now_dt,
+            t_years,
             RISK_FREE_RATE,
             per_stock_div_yield,
             option_type=option_type,
         )
-
-    pop, ev = _calculate_pop_ev(
-        price,
-        strike,
-        implied_volatility,
-        expiration,
-        now_dt,
-        RISK_FREE_RATE,
-        per_stock_div_yield,
-        premium,
-        option_type=option_type,
-    )
 
     # Ex-Dividend Risk Warning System
     ex_div_dt = symbol_data.get("ex_dividend_date_dt")
@@ -1180,19 +1286,22 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
     else:
         otm_pct = ((price - strike) / price) * 100
 
-    annualized_yield_pct = ((1 + premium / strike) ** (365.0 / dte) - 1) * 100
-    monthly_yield_pct = ((1 + premium / strike) ** (30.0 / dte) - 1) * 100
+    collateral = collateral_per_share(strike, price, net_premium, option_type=option_type)
+    monthly_yield_pct, annualized_yield_pct = simple_yields(net_premium, collateral, dte)
 
     checks = {
-        "Yield >= 1%/month": monthly_yield_pct >= TARGET_MONTHLY_YIELD_PCT,
-        f"Premium > {MIN_PREMIUM}": premium > MIN_PREMIUM,
+        "Yield >= 1%/month": monthly_yield_pct is not None
+        and monthly_yield_pct >= TARGET_MONTHLY_YIELD_PCT,
+        f"Premium > {MIN_PREMIUM}": net_premium > MIN_PREMIUM,
         f"{MIN_DTE} <= DTE <= {MAX_DTE}": MIN_DTE <= dte <= MAX_DTE,
         f"OTM >= {MIN_OTM_PCT}%": (strike > price if option_type == "call" else strike < price) and otm_pct >= MIN_OTM_PCT,
         f"OI >= {MIN_OPEN_INTEREST}": open_interest >= MIN_OPEN_INTEREST,
         f"Volume >= {MIN_VOLUME}": volume >= MIN_VOLUME,
-        f"Spread <= {MAX_SPREAD_PCT}%": spread_pct is not None
-        and spread_pct <= MAX_SPREAD_PCT,
     }
+    if spread_pct is not None:
+        checks[f"Spread <= {MAX_SPREAD_PCT}%"] = spread_pct <= MAX_SPREAD_PCT
+    if spread_abs is not None:
+        checks[f"Spread <= ${MAX_SPREAD_ABS:.2f}"] = spread_abs <= MAX_SPREAD_ABS
 
     if delta is not None:
         abs_delta = abs(delta)
@@ -1201,19 +1310,6 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
         )
 
     failed = [name for name, passed in checks.items() if not passed]
-
-    liquidity_score = min(open_interest / 500, 1.0) * SCORE_WEIGHT_OI + min(volume / 50, 1.0) * SCORE_WEIGHT_VOLUME
-    yield_score = min(monthly_yield_pct / TARGET_MONTHLY_YIELD_PCT, 2.0) * SCORE_WEIGHT_YIELD
-    otm_score = min(max(otm_pct, 0) / 10, 1.0) * SCORE_WEIGHT_OTM
-    spread_score = 0
-    if spread_pct is not None:
-        spread_score = max(0.0, 1.0 - (spread_pct / MAX_SPREAD_PCT)) * SCORE_WEIGHT_SPREAD
-    dte_mid = (MIN_DTE + MAX_DTE) / 2
-    dte_score = max(0.0, 1.0 - abs(dte - dte_mid) / dte_mid) * SCORE_WEIGHT_DTE
-    iv_score = min(max(implied_volatility or 0, 0), 2.0) / 2.0 * SCORE_WEIGHT_IV
-    score = (
-        yield_score + otm_score + liquidity_score + spread_score + dte_score + iv_score
-    )
 
     return {
         "Symbol": symbol,
@@ -1238,19 +1334,27 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
         "EarningsBeforeExpiry": earnings_before_expiry,
         "DTE": dte,
         "Premium": round(premium, 2),
+        "NetPremium": _safe_round(net_premium),
+        "PricingSource": price_source,
         "Bid": _safe_round(bid),
         "Ask": _safe_round(ask),
+        "SpreadAbs": _safe_round(spread_abs),
         "SpreadPct": _safe_round(spread_pct),
-        "MonthlyYieldPct": round(monthly_yield_pct, 2),
-        "AnnualizedYieldPct": round(annualized_yield_pct, 2),
+        "MonthlyYieldPct": _safe_round(monthly_yield_pct),
+        "AnnualizedYieldPct": _safe_round(annualized_yield_pct),
         "OTMPct": round(otm_pct, 2),
         "OpenInterest": open_interest,
         "Volume": volume,
         "Delta": _safe_round(delta, 3),
         "ImpliedVolatility": _safe_round(implied_volatility, 3),
-        "PoP": pop,
-        "EV": ev,
-        "Score": round(score, 2),
+        "ForecastVol": None,
+        "VRPRatio": None,
+        "SigmaDistance": None,
+        "CreditRiskRatio": None,
+        "PoP": None,
+        "EV": None,
+        "ExpectedAssignmentLoss": None,
+        "Score": 0.0,
     }, failed
 
 
@@ -1300,6 +1404,16 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
         _bump_error_stat("empty_contract_sets")
         debug_log(f"No {option_type} contracts extracted for {symbol}")
 
+    atm_iv = extract_atm_iv(
+        contracts,
+        price,
+        now_dt=now_dt,
+        dte_fn=_dte_from_expiration,
+    )
+    if CURRENT_SCAN_DATE:
+        IV_HISTORY_STORE.record(symbol, CURRENT_SCAN_DATE, atm_iv)
+    iv_rank, iv_percentile, iv_observation_count = IV_HISTORY_STORE.rank(symbol, atm_iv)
+
     # First pass: evaluate contracts without indicator enrichment.
     # Only keep potential PASS (0 failures) or NEAR (1 failure) candidates.
     pre_evaluated = []
@@ -1308,8 +1422,8 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
         if not evaluated:
             continue
         contract_data, failed = evaluated
-        spread_key = f"Spread <= {MAX_SPREAD_PCT}%"
-        if len(failed) <= 1 and spread_key not in failed:
+        spread_keys = {f"Spread <= {MAX_SPREAD_PCT}%", f"Spread <= ${MAX_SPREAD_ABS:.2f}"}
+        if len(failed) <= 1 and not spread_keys.intersection(failed):
             pre_evaluated.append((contract_data, list(failed)))
 
     if not pre_evaluated:
@@ -1338,22 +1452,94 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
 
         iv = contract_data.get("ImpliedVolatility")
         if indicators and iv is not None:
-            iv_rank = compute_iv_hv_percentile(
+            iv_hv_percentile = compute_iv_hv_percentile(
                 iv, indicators.get("hv_low"), indicators.get("hv_high")
             )
-            contract_data["IVHVPercentile"] = _safe_round(iv_rank)
-            if iv_rank is not None and iv_rank < MIN_IV_RANK:
-                failed.append(f"IVHVPercentile >= {MIN_IV_RANK:.0%}")
-                contract_data["Status"] = (
-                    "NEAR" if len(failed) == 1 else contract_data["Status"]
-                )
-                contract_data["Failed Criterion"] = (
-                    failed[0]
-                    if len(failed) == 1
-                    else contract_data.get("Failed Criterion", "")
-                )
+            contract_data["IVHVPercentile"] = _safe_round(iv_hv_percentile)
         else:
             contract_data["IVHVPercentile"] = None
+
+        contract_data["ATMImpliedVolatility"] = _safe_round(atm_iv, 3)
+        contract_data["IVRank"] = _safe_round(iv_rank)
+        contract_data["IVPercentile"] = _safe_round(iv_percentile)
+        contract_data["IVRankObservationCount"] = iv_observation_count
+
+        dte = contract_data.get("DTE")
+        strike = contract_data.get("Strike")
+        net_premium = _to_float(contract_data.get("NetPremium"))
+        t_years = years_to_expiration(
+            _parse_expiration(contract_data.get("Expiration")),
+            now_dt,
+        )
+        forecast_vol = forecast_volatility(
+            iv,
+            indicators.get("hv_current") if indicators else None,
+            indicators.get("hv_long") if indicators else None,
+            hv_weight=FORECAST_HV_WEIGHT,
+            iv_haircut=FORECAST_IV_HAIRCUT,
+        )
+        vrp_ratio = variance_risk_premium(iv, forecast_vol)
+        drift = _real_world_drift(indicators)
+        expected_loss = expected_itm_payoff(
+            price,
+            strike,
+            forecast_vol,
+            t_years,
+            drift,
+            option_type=option_type,
+        )
+        pop = probability_of_profit(
+            price,
+            strike,
+            forecast_vol,
+            t_years,
+            drift,
+            net_premium,
+            option_type=option_type,
+        )
+        sigma_dist = sigma_distance(price, strike, forecast_vol, t_years, option_type=option_type)
+        risk_ratio = credit_risk_ratio(net_premium, expected_loss)
+        ev = None
+        if net_premium is not None and expected_loss is not None:
+            ev = net_premium - expected_loss
+
+        contract_data["ForecastVol"] = _safe_round(forecast_vol, 3)
+        contract_data["VRPRatio"] = _safe_round(vrp_ratio, 3)
+        contract_data["SigmaDistance"] = _safe_round(sigma_dist, 3)
+        contract_data["CreditRiskRatio"] = _safe_round(risk_ratio, 3)
+        contract_data["PoP"] = _safe_round(pop * 100.0 if pop is not None else None, 1)
+        contract_data["EV"] = _safe_round(ev)
+        contract_data["ExpectedAssignmentLoss"] = _safe_round(expected_loss)
+
+        effective_iv_rank = (
+            iv_rank if iv_rank is not None else contract_data.get("IVHVPercentile")
+        )
+        if effective_iv_rank is not None and effective_iv_rank < MIN_IV_RANK:
+            failed.append(f"IVRank >= {MIN_IV_RANK:.0%}")
+
+        liquidity_score = min(contract_data["OpenInterest"] / 500, 1.0) * SCORE_WEIGHT_OI
+        liquidity_score += min(contract_data["Volume"] / 50, 1.0) * SCORE_WEIGHT_VOLUME
+        yield_score = 0.0
+        if contract_data.get("MonthlyYieldPct") is not None and TARGET_MONTHLY_YIELD_PCT > 0:
+            yield_score = (
+                min(contract_data["MonthlyYieldPct"] / TARGET_MONTHLY_YIELD_PCT, 2.0)
+                * SCORE_WEIGHT_YIELD
+            )
+        otm_score = min(max(contract_data["OTMPct"], 0) / 10, 1.0) * SCORE_WEIGHT_OTM
+        spread_score = 0.0
+        if contract_data.get("SpreadPct") is not None:
+            spread_score = (
+                max(0.0, 1.0 - (contract_data["SpreadPct"] / MAX_SPREAD_PCT))
+                * SCORE_WEIGHT_SPREAD
+            )
+        dte_mid = (MIN_DTE + MAX_DTE) / 2
+        dte_score = max(0.0, 1.0 - abs(dte - dte_mid) / dte_mid) * SCORE_WEIGHT_DTE
+        iv_score = _score_variance_risk_premium(vrp_ratio)
+        contract_data["Score"] = _safe_round(
+            yield_score + otm_score + liquidity_score + spread_score + dte_score + iv_score
+        )
+        contract_data["Status"] = "PASS" if len(failed) == 0 else "NEAR"
+        contract_data["Failed Criterion"] = failed[0] if len(failed) == 1 else ""
 
         if len(failed) == 0:
             passed_contracts.append(contract_data)
@@ -1361,11 +1547,19 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
             near_contracts.append(contract_data)
 
     passed_contracts.sort(
-        key=lambda row: (row["Score"], row["MonthlyYieldPct"], row["OpenInterest"]),
+        key=lambda row: (
+            row.get("Score") or 0.0,
+            row.get("MonthlyYieldPct") or 0.0,
+            row.get("OpenInterest") or 0,
+        ),
         reverse=True,
     )
     near_contracts.sort(
-        key=lambda row: (row["Score"], row["MonthlyYieldPct"], row["OpenInterest"]),
+        key=lambda row: (
+            row.get("Score") or 0.0,
+            row.get("MonthlyYieldPct") or 0.0,
+            row.get("OpenInterest") or 0,
+        ),
         reverse=True,
     )
 
@@ -1446,14 +1640,16 @@ def deep_analysis(candidates, option_type="put"):
 
 
 def main():
-    global DEBUG
+    global CURRENT_SCAN_DATE, DEBUG
     args = parse_args()
     DEBUG = args.debug
     option_type = args.option_type
     type_label = option_type.upper()
+    CURRENT_SCAN_DATE = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     # Re-initialize config for the chosen option type
     init_screening_config(option_type)
+    _warn_if_config_is_overconstrained(SCREENING_CONFIG, option_type)
 
     if DEBUG:
         print("Debug logging enabled.")
@@ -1472,8 +1668,8 @@ def main():
         f"yield>={TARGET_MONTHLY_YIELD_PCT:.2f}%/mo, "
         f"DTE={MIN_DTE}-{MAX_DTE}, "
         f"|delta|={MIN_ABS_DELTA:.2f}-{MAX_ABS_DELTA:.2f}, "
-        f"spread<={MAX_SPREAD_PCT:.2f}%, "
-        f"ivHVPercentile>={MIN_IV_RANK:.0%}, "
+        f"spread<={MAX_SPREAD_PCT:.2f}% and <=${MAX_SPREAD_ABS:.2f}, "
+        f"ivRank>={MIN_IV_RANK:.0%}, "
         f"filterDowntrends={FILTER_DOWNTRENDS}"
     )
 
@@ -1487,7 +1683,19 @@ def main():
     print("Phase 4: Sorting and Reporting...")
     combined_results = final_results + near_misses
     combined_results.sort(
-        key=lambda x: (x["Status"] != "PASS", -x["Score"], -x["MonthlyYieldPct"])
+        key=lambda x: (
+            x["Status"] != "PASS",
+            -(x.get("Score") or 0.0),
+            -(x.get("MonthlyYieldPct") or 0.0),
+        )
+    )
+    final_results = [row for row in combined_results if row["Status"] == "PASS"]
+    sector_map = load_sector_map(os.path.join(DATA_INPUT_DIR, "sectors.json"))
+    portfolio = build_portfolio(
+        final_results,
+        SCREENING_CONFIG,
+        option_type=option_type,
+        sector_map=sector_map,
     )
 
     if combined_results:
@@ -1505,6 +1713,7 @@ def main():
             "EarningsBeforeExpiry",
             "DTE",
             "Premium",
+            "NetPremium",
             "EV",
             "MonthlyYieldPct",
             "AnnualizedYieldPct",
@@ -1515,7 +1724,13 @@ def main():
             "Delta",
             "PoP",
             "ImpliedVolatility",
+            "ForecastVol",
+            "IVRank",
+            "IVPercentile",
             "IVHVPercentile",
+            "VRPRatio",
+            "SigmaDistance",
+            "CreditRiskRatio",
             "RSI",
             "ADX",
             "DiffPct",
@@ -1546,6 +1761,7 @@ def main():
         "target_monthly_yield_pct": TARGET_MONTHLY_YIELD_PCT,
         "options_api_url": OPTIONS_URL,
         "screening_config": SCREENING_CONFIG,
+        "portfolio": portfolio,
         "results": combined_results,
     }
     output = convert_numpy_types(output)
@@ -1553,7 +1769,11 @@ def main():
     os.makedirs(DATA_OUTPUT_DIR, exist_ok=True)
     with open(output_file, "w") as f:
         json.dump(output, f, indent=2, cls=NumpyEncoder)
+    IV_HISTORY_STORE.save()
+    archive_path = archive_scan(combined_results, option_type=option_type)
     print(f"\nResults saved to {output_file}")
+    print(f"Portfolio selected {portfolio['position_count']} positions.")
+    print(f"Archived scan to {archive_path}")
 
 
 if __name__ == "__main__":

@@ -21,6 +21,10 @@ echo === Analyzing PUT options ===
 python analyze_puts.py
 if errorlevel 1 goto :error
 
+rem Optional feedback loop once archived scans have started expiring:
+rem python -m options_wheel.outcomes --type call
+rem python -m options_wheel.outcomes --type put
+
 echo.
 echo === Starting web server ===
 start "" cmd /c "timeout /t 2 /nobreak >nul && start http://localhost:8000/web/"

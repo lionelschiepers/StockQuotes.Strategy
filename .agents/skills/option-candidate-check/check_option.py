@@ -9,24 +9,51 @@ Usage:
   python check_option.py --ticker AAPL --type put --list
   python check_option.py --ticker AAPL --type put --expiration 2026-09-18 --strike 290
   python check_option.py --ticker AAPL --type call --expiration 2026-09-18 --strike 315
+  python check_option.py --ticker AAPL --news
 
 Environment:
-  OW_API_BASE   base URL of the OptionsWheel API (default http://localhost:7071/api)
+  OW_API_BASE        base URL of the OptionsWheel API (default http://localhost:7071/api)
+  OW_SEC_USER_AGENT  User-Agent for SEC EDGAR requests (default StockQuotesStrategy research@stockquotes.example.com)
 """
 
 from __future__ import annotations
 
 import argparse
+import email.utils
 import json
 import math
 import os
+import re
 import sys
+import tempfile
 import time
+import urllib.parse
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta, timezone
 
 import requests
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+SEC_UA = os.environ.get(
+    "OW_SEC_USER_AGENT", "StockQuotesStrategy research@stockquotes.example.com"
+)
+SEC_TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
+SEC_TICKER_MAP_CACHE = os.path.join(tempfile.gettempdir(), "sec_company_tickers.json")
+SEC_FILING_FORMS = ("8-K", "10-K", "10-Q", "S-4", "DEF 14A", "13D", "13G", "144")
+NEWS_RSS_URL = "https://news.google.com/rss/search"
+
+QUOTE_FIELDS_CORE = (
+    "symbol,shortName,regularMarketPrice,trailingPE,"
+    "averageDailyVolume3Month,marketCap,trailingAnnualDividendYield,"
+    "fiftyDayAverage,earningsTimestamp,earningsTimestampStart,"
+    "earningsTimestampEnd,dividendDate,trailingAnnualDividendRate"
+)
+# Fields the OptionsWheel quote endpoint actually supports (quote module only).
+QUOTE_FIELDS_CONSENSUS = (
+    "regularMarketPrice,beta,fiftyTwoWeekHigh,fiftyTwoWeekLow,"
+    "sharesOutstanding,trailingPE,marketCap"
+)
 
 
 def find_options_wheel_src(start=SCRIPT_DIR):
@@ -46,11 +73,11 @@ def api_base():
     return os.environ.get("OW_API_BASE", "http://localhost:7071/api").rstrip("/")
 
 
-def http_get_json(url, timeout=30, retries=3):
+def http_get_json(url, timeout=30, retries=3, headers=None):
     last_err = None
     for attempt in range(retries):
         try:
-            resp = requests.get(url, timeout=timeout)
+            resp = requests.get(url, timeout=timeout, headers=headers or {})
             if resp.status_code == 200:
                 return resp.json()
             last_err = f"HTTP {resp.status_code}: {resp.text[:200]}"
@@ -60,20 +87,48 @@ def http_get_json(url, timeout=30, retries=3):
     raise RuntimeError(f"API request failed: {url} ({last_err})")
 
 
+def http_get_text(url, timeout=30, retries=3, headers=None):
+    last_err = None
+    for attempt in range(retries):
+        try:
+            resp = requests.get(url, timeout=timeout, headers=headers or {})
+            if resp.status_code == 200:
+                return resp.text
+            last_err = f"HTTP {resp.status_code}: {resp.text[:200]}"
+        except requests.RequestException as e:
+            last_err = str(e)
+        time.sleep(0.6 * (attempt + 1))
+    raise RuntimeError(f"Request failed: {url} ({last_err})")
+
+
 def fetch_quote(symbol):
     base = api_base()
-    fields = (
-        "symbol,shortName,regularMarketPrice,trailingPE,"
-        "averageDailyVolume3Month,marketCap,trailingAnnualDividendYield,"
-        "fiftyDayAverage,earningsTimestamp,earningsTimestampStart,"
-        "earningsTimestampEnd,dividendDate,trailingAnnualDividendRate"
-    )
+    fields = QUOTE_FIELDS_CORE
     url = f"{base}/yahoo-finance?symbols={symbol}&fields={fields}"
     data = http_get_json(url)
     if not isinstance(data, list) or not data:
         raise RuntimeError(f"No quote found for symbol {symbol}")
     item = next((x for x in data if str(x.get("symbol", "")).upper() == symbol.upper()), data[0])
     return item
+
+
+def fetch_consensus_quote(symbol):
+    """Analyst/consensus fields, fetched separately (API caps at 20 fields/request)."""
+    base = api_base()
+    url = f"{base}/yahoo-finance?symbols={symbol}&fields={QUOTE_FIELDS_CONSENSUS}"
+    data = http_get_json(url)
+    if not isinstance(data, list) or not data:
+        return {}
+    return next((x for x in data if str(x.get("symbol", "")).upper() == symbol.upper()), data[0])
+
+
+def fetch_quote_full(symbol):
+    quote = fetch_quote(symbol)
+    try:
+        quote.update(fetch_consensus_quote(symbol))
+    except Exception:
+        pass
+    return quote
 
 
 def fetch_chain(symbol, option_type, expiration_date=None):
@@ -98,6 +153,286 @@ def fetch_history(symbol):
     if len(quotes) < 50:
         raise RuntimeError(f"Insufficient historical data for {symbol}: {len(quotes)} bars")
     return quotes
+
+
+def fetch_ticker_cik_map():
+    """Ticker -> CIK map from SEC, cached in the temp dir (24h TTL)."""
+    import time as _time
+
+    if os.path.exists(SEC_TICKER_MAP_CACHE):
+        age = _time.time() - os.path.getmtime(SEC_TICKER_MAP_CACHE)
+        if age < 86400:
+            with open(SEC_TICKER_MAP_CACHE, "r", encoding="utf-8") as fh:
+                return json.load(fh)
+    data = http_get_json(SEC_TICKER_MAP_URL, timeout=45, headers={"User-Agent": SEC_UA})
+    with open(SEC_TICKER_MAP_CACHE, "w", encoding="utf-8") as fh:
+        json.dump(data, fh)
+    return data
+
+
+def lookup_cik(symbol):
+    mapping = fetch_ticker_cik_map()
+    target = symbol.upper()
+    for entry in mapping.values():
+        if str(entry.get("ticker", "")).upper() == target:
+            return str(entry["cik_str"])
+    return None
+
+
+def fetch_sec_filings(symbol, max_age_days=180, limit=10):
+    """Recent material filings (8-K, 10-Q/10-K, S-4, 13D/13G, 144) from EDGAR."""
+    cik = lookup_cik(symbol)
+    if not cik:
+        return {"cik": None, "filings": []}
+    url = f"https://data.sec.gov/submissions/CIK{int(cik):010d}.json"
+    data = http_get_json(url, timeout=45, headers={"User-Agent": SEC_UA})
+    recent = ((data.get("filings") or {}).get("recent") or {})
+    forms = recent.get("form") or []
+    filed_dates = recent.get("filingDate") or []
+    accessions = recent.get("accessionNumber") or []
+    documents = recent.get("primaryDocument") or []
+    descriptions = recent.get("primaryDocDescription") or []
+    now = datetime.now(timezone.utc)
+    out = []
+    for i, form in enumerate(forms):
+        if form not in SEC_FILING_FORMS:
+            continue
+        try:
+            filed = datetime.strptime(filed_dates[i], "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        except (ValueError, IndexError):
+            continue
+        if (now - filed).days > max_age_days:
+            continue
+        desc = descriptions[i] if i < len(descriptions) and descriptions[i] else form
+        link = (
+            f"https://www.sec.gov/Archives/edgar/data/{int(cik)}/"
+            f"{accessions[i].replace('-', '')}/{documents[i]}"
+        )
+        out.append({"form": form, "filed": filed.strftime("%Y-%m-%d"), "description": desc, "link": link})
+        if len(out) >= limit:
+            break
+    return {"cik": cik, "filings": out}
+
+
+def fetch_news(symbol, max_items=10):
+    """Recent headlines from Google News RSS for the ticker."""
+    qs = urllib.parse.urlencode(
+        {"q": f"{symbol} stock", "hl": "en-US", "gl": "US", "ceid": "US:en"}
+    )
+    text = http_get_text(f"{NEWS_RSS_URL}?{qs}", timeout=45)
+    try:
+        root = ET.fromstring(text)
+    except ET.ParseError as e:
+        return {"error": f"failed to parse news feed: {e}", "news": []}
+    items = []
+    for item in root.iter("item"):
+        title = item.findtext("title")
+        if not title:
+            continue
+        pub = item.findtext("pubDate")
+        date = None
+        if pub:
+            try:
+                date = email.utils.parsedate_to_datetime(pub).astimezone(timezone.utc).strftime("%Y-%m-%d")
+            except (TypeError, ValueError):
+                date = pub
+        source_el = item.find("source")
+        items.append(
+            {
+                "title": title,
+                "date": date,
+                "source": source_el.text if source_el is not None else None,
+                "link": item.findtext("link"),
+            }
+        )
+        if len(items) >= max_items:
+            break
+    return {"news": items}
+
+
+def _parse_js_kv_block(text, start_key):
+    """Extract a flat JS object literal like priceTargets:{k:v,k:v} and return a dict."""
+    start = text.find(f"{start_key}:")
+    if start < 0:
+        return None
+    brace = text.find("{", start)
+    if brace < 0:
+        return None
+    depth = 0
+    end = None
+    for i in range(brace, len(text)):
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                end = i
+                break
+    if end is None:
+        return None
+    body = text[brace + 1 : end]
+    out = {}
+    for m in re.finditer(r'([A-Za-z_][A-Za-z0-9_]*)\s*:\s*("[^"]*"|[\d.]+)', body):
+        key, val = m.group(1), m.group(2)
+        if val.startswith('"'):
+            out[key] = val.strip('"')
+        elif "." in val:
+            out[key] = float(val)
+        else:
+            out[key] = int(val)
+    return out
+
+
+def fetch_analyst_consensus_stockanalysis(symbol):
+    """Fallback analyst consensus from stockanalysis.com (no API key).
+
+    Data is embedded in the page's JS state as flat objects
+    (priceTargets:{...}, currentRatings:{...}). Best-effort: returns None if
+    the page cannot be fetched or parsed.
+    """
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
+    url = f"https://stockanalysis.com/stocks/{symbol.lower()}/forecast/"
+    text = http_get_text(url, timeout=45, headers=headers)
+    price_targets = _parse_js_kv_block(text, "priceTargets")
+    ratings = _parse_js_kv_block(text, "currentRatings")
+    if not price_targets and not ratings:
+        return None
+    out = {"source": "stockanalysis.com"}
+    if price_targets:
+        out["price_target"] = {
+            "avg": price_targets.get("avg"),
+            "median": price_targets.get("median"),
+            "low": price_targets.get("low"),
+            "high": price_targets.get("high"),
+            "num_analysts": price_targets.get("numPriceTargets"),
+        }
+    if ratings:
+        out["rating"] = {
+            "consensus": ratings.get("consensus"),
+            "score": ratings.get("score"),
+            "count": ratings.get("count"),
+            "strong_buy": ratings.get("strongBuy"),
+            "buy": ratings.get("buy"),
+            "hold": ratings.get("hold"),
+            "sell": ratings.get("sell"),
+            "strong_sell": ratings.get("strongSel"),
+        }
+    return out
+
+
+def fetch_analyst_consensus_api(symbol):
+    """Analyst consensus from the OptionsWheel API (yahoo-finance-summary endpoint).
+
+    Uses quoteSummary modules financialData / defaultKeyStatistics /
+    recommendationTrend. Returns None if the endpoint is unavailable.
+    """
+    url = f"{api_base()}/yahoo-finance-summary?ticker={symbol}"
+    data = http_get_json(url, timeout=45)
+    if not isinstance(data, dict):
+        return None
+
+    fin = data.get("financialData") or {}
+    stat = data.get("defaultKeyStatistics") or {}
+    trend_list = (data.get("recommendationTrend") or {}).get("trend") or []
+    trend = trend_list[0] if trend_list else {}
+
+    out = {"source": "yahoo finance"}
+    if fin:
+        out["price_target"] = {
+            "avg": _safe_round(fin.get("targetMeanPrice")),
+            "median": _safe_round(fin.get("targetMedianPrice")),
+            "low": _safe_round(fin.get("targetLowPrice")),
+            "high": _safe_round(fin.get("targetHighPrice")),
+            "num_analysts": fin.get("numberOfAnalystOpinions"),
+        }
+        out["rating"] = {
+            "consensus": fin.get("recommendationKey"),
+            "score": _safe_round(fin.get("recommendationMean"), 2),
+            "count": sum(
+                _to_float(trend.get(k)) or 0
+                for k in ("strongBuy", "buy", "hold", "sell", "strongSell")
+            ) or None,
+            "strong_buy": trend.get("strongBuy"),
+            "buy": trend.get("buy"),
+            "hold": trend.get("hold"),
+            "sell": trend.get("sell"),
+            "strong_sell": trend.get("strongSell"),
+        }
+    if stat:
+        out["short_interest"] = {
+            "shares_short": stat.get("sharesShort"),
+            "short_ratio": _safe_round(stat.get("shortRatio"), 2),
+            "short_percent_of_float": _safe_round(stat.get("shortPercentOfFloat"), 4),
+        }
+        out["valuation"] = {
+            "revenue_growth": _safe_round(fin.get("revenueGrowth"), 4),
+            "gross_margins": _safe_round(fin.get("grossMargins"), 4),
+            "profit_margins": _safe_round(stat.get("profitMargins"), 4),
+            "forward_pe": _safe_round(stat.get("forwardPE"), 2),
+            "peg_ratio": _safe_round(stat.get("pegRatio"), 2),
+            "price_to_book": _safe_round(stat.get("priceToBook"), 2),
+            "held_percent_institutions": _safe_round(stat.get("heldPercentInstitutions"), 4),
+            "held_percent_insiders": _safe_round(stat.get("heldPercentInsiders"), 4),
+            "beta": _safe_round(stat.get("beta"), 3),
+        }
+    if not fin and not stat:
+        return None
+    return out
+
+
+def fetch_analyst_consensus(symbol):
+    """Analyst consensus, preferring the local API, falling back to stockanalysis.com."""
+    try:
+        consensus = fetch_analyst_consensus_api(symbol)
+        if consensus:
+            return consensus
+    except Exception:
+        pass
+    return fetch_analyst_consensus_stockanalysis(symbol)
+
+
+def research_events(symbol):
+    """News, SEC filings, analyst consensus and quote metrics for a ticker (--news mode)."""
+    report = {
+        "symbol": symbol,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "quote_metrics": None,
+        "analyst_consensus": None,
+        "news": None,
+        "sec_filings": None,
+    }
+    try:
+        quote = fetch_quote_full(symbol)
+        spot = _to_float(quote.get("regularMarketPrice"))
+        report["quote_metrics"] = {
+            "current_price": _safe_round(spot),
+            "beta": _safe_round(quote.get("beta"), 3),
+            "fifty_two_week_high": _safe_round(quote.get("fiftyTwoWeekHigh")),
+            "fifty_two_week_low": _safe_round(quote.get("fiftyTwoWeekLow")),
+            "distance_from_52w_high_pct": _safe_round(
+                ((spot - _to_float(quote.get("fiftyTwoWeekHigh"))) / _to_float(quote.get("fiftyTwoWeekHigh"))) * 100
+                if spot and _to_float(quote.get("fiftyTwoWeekHigh")) else None
+            ),
+            "shares_outstanding": quote.get("sharesOutstanding"),
+            "trailing_pe": _safe_round(quote.get("trailingPE"), 2),
+            "market_cap": quote.get("marketCap"),
+            "avg_volume_3m": quote.get("averageDailyVolume3Month"),
+        }
+    except Exception as e:
+        report["quote_metrics"] = {"error": str(e)}
+    try:
+        report["analyst_consensus"] = fetch_analyst_consensus(symbol)
+    except Exception as e:
+        report["analyst_consensus"] = {"error": str(e)}
+    try:
+        report["sec_filings"] = fetch_sec_filings(symbol)
+    except Exception as e:
+        report["sec_filings"] = {"error": str(e)}
+    try:
+        report["news"] = fetch_news(symbol)
+    except Exception as e:
+        report["news"] = {"error": str(e)}
+    return report
 
 
 def _to_float(v):
@@ -181,7 +516,7 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
         raise RuntimeError(f"Cannot parse expiration date: {expiration_date}")
     expiration_dt = expiration_dt.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    quote = fetch_quote(symbol)
+    quote = fetch_quote_full(symbol)
     chain = fetch_chain(symbol, option_type, expiration_date=expiration_date)
     spot = _to_float(quote.get("regularMarketPrice"))
     if not spot:
@@ -323,6 +658,16 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
             "delta_bs": _safe_round(delta, 3),
             "moneyness_otm_pct": _safe_round(otm_pct),
         },
+        "consensus": {
+            "beta": _safe_round(quote.get("beta"), 3),
+            "fifty_two_week_high": _safe_round(quote.get("fiftyTwoWeekHigh")),
+            "fifty_two_week_low": _safe_round(quote.get("fiftyTwoWeekLow")),
+            "shares_outstanding": quote.get("sharesOutstanding"),
+            "runway_from_52w_high_pct": _safe_round(
+                ((_to_float(quote.get("fiftyTwoWeekHigh")) - spot) / spot) * 100
+                if spot and _to_float(quote.get("fiftyTwoWeekHigh")) else None
+            ),
+        },
         "events": {
             "next_earnings": next_earnings_dt.strftime("%Y-%m-%d") if next_earnings_dt else None,
             "earnings_before_expiry": earnings_before_expiry,
@@ -366,6 +711,7 @@ def main():
     parser.add_argument("--ticker", required=True)
     parser.add_argument("--type", choices=["put", "call"], default="put")
     parser.add_argument("--list", action="store_true", help="List next expirations and suggested strikes")
+    parser.add_argument("--news", action="store_true", help="Research news, SEC filings and analyst consensus")
     parser.add_argument("--expiration", default=None, help="Expiration date YYYY-MM-DD")
     parser.add_argument("--strike", type=float, default=None)
     args = parser.parse_args()
@@ -377,7 +723,9 @@ def main():
     if src not in sys.path:
         sys.path.insert(0, src)
 
-    if args.list:
+    if args.news:
+        result = research_events(args.ticker)
+    elif args.list:
         result = list_expirations_and_strikes(args.ticker, args.type)
     else:
         if not args.expiration or args.strike is None:

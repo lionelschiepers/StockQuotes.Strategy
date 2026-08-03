@@ -35,9 +35,30 @@ start the API (or set `OW_API_BASE`).
     any other format returns HTTP 400).
 - Historical: `GET {base}/yahoo-finance-historical?ticker=TICKER&from=YYYY-MM-DD&to=YYYY-MM-DD&interval=1d`
   Returns `{"meta":..., "quotes":[{date,open,high,low,close,volume}]}`.
+- Summary: `GET {base}/yahoo-finance-summary?ticker=TICKER&modules=financialData,defaultKeyStatistics,recommendationTrend`
+  Returns the Yahoo `quoteSummary` modules: analyst price targets and rating
+  (`financialData`), short interest / beta / valuation (`defaultKeyStatistics`),
+  and rating breakdown over time (`recommendationTrend`). `modules` defaults to
+  those three if omitted. Any module from Yahoo's quoteSummary is allowed
+  (max 20).
 
-The helper handles all three calls and computes every metric. You normally only
+The helper handles all of the calls and computes every metric. You normally only
 need to run the helper, not the raw API.
+
+### External sources used by `--news`
+
+- **OptionsWheel API `yahoo-finance-summary`** — primary source for analyst
+  consensus (price targets, rating breakdown, short interest, valuation).
+- **Google News RSS** — `https://news.google.com/rss/search?q=TICKER+stock&hl=en-US&gl=US&ceid=US:en`
+  returns recent headlines.
+- **SEC EDGAR** — ticker-to-CIK map (`https://www.sec.gov/files/company_tickers.json`,
+  cached 24h in the OS temp dir) then `https://data.sec.gov/submissions/CIK<10-digit>.json`
+  for recent 8-K/10-Q/10-K/S-4/13D/13G/144 filings. SEC requires a proper
+  User-Agent; set `OW_SEC_USER_AGENT` (default `StockQuotesStrategy research@stockquotes.example.com`)
+  if you hit a 403.
+- **stockanalysis.com** — `https://stockanalysis.com/stocks/TICKER/forecast/`
+  fallback for analyst price-target/rating consensus if the API summary
+  endpoint is unavailable.
 
 ## Workflow
 
@@ -47,6 +68,18 @@ Run in the current working directory (the skill folder is
 ```bash
 python .agents/skills/option-candidate-check/check_option.py --ticker AAPL --type put --list
 ```
+
+### Step 0 — Research mode (news, SEC filings, analyst consensus)
+The helper has a dedicated research mode that pulls analyst price-target
+consensus from the quote, recent headlines from Google News RSS, and material
+SEC filings (8-K, 10-Q/10-K, S-4, 13D/13G, 144) from EDGAR:
+
+```bash
+python .agents/skills/option-candidate-check/check_option.py --ticker AAPL --news
+```
+
+Run it alongside the full analysis (Step 5) and fold the results into the
+verdict.
 
 ### Step 1 — Ticker
 Ask the user for the ticker symbol (e.g. "AAPL"). Free-text input.
@@ -78,10 +111,30 @@ If the strike is not available for that expiry the helper prints the available
 strikes — go back to Step 4 and pick one of those.
 
 ### Step 6 — Research events
-Beyond the earnings / ex-dividend data already in the report, do a web search
-for the ticker ("<TICKER> earnings date", "<TICKER> stock news", "<TICKER>
-upcoming events") and note any recent news, product launches, splits,
-lawsuits, or macro catalysts that could move the stock before expiry.
+Run the `--news` mode above (Step 0) and read its four sections:
+
+- `quote_metrics` — current price, beta, 52-week high/low,
+  `distance_from_52w_high_pct` (negative = below the high), shares outstanding,
+  trailing P/E, market cap, avg volume. A stock far below its 52w high or with
+  a high beta is more volatile; a very high P/E can flag sentiment-heavy pricing.
+- `analyst_consensus` — `price_target.avg/median/low/high/num_analysts`,
+  `rating.consensus/score/count` plus the strong-buy/buy/hold/sell/strong-sell
+  split, `short_interest` (shares short, `short_ratio`, `short_percent_of_float`)
+  and `valuation` (revenue/gross/profit margins, forward P/E, PEG, P/B,
+  institutional/insider ownership, beta). Compare `price_target.avg` vs current
+  price for implied upside; a `sell`-heavy split, `short_percent_of_float` > 10%,
+  or a high `short_ratio` are caution flags for puts and calls alike.
+- `sec_filings` — recent material filings from EDGAR. An **8-K** in the last 180
+  days can be a merger/acquisition, lawsuit, or guidance cut; **S-4** = merger
+  proxy (deal pending); **13D/13G** = activist/institutional stake (potential
+  bid or pressure); **144** = insider selling ahead of expiry. Any of these is
+  event risk beyond the calendar.
+- `news` — latest headlines with date/source. Scan for catalysts (product
+  launches, earnings pre-announcements, splits, regulatory action, macro).
+
+If a section fails (network, unknown ticker, no SEC match, blocked page), fall
+back to a manual web search ("<TICKER> stock news", "<TICKER> earnings date",
+"<TICKER> lawsuit") and note it in the verdict.
 
 ### Step 7 — Interpret and give a verdict
 Use the screen thresholds from the config YAMLs as reference:
@@ -121,6 +174,9 @@ Read each metric in the report:
 - `events.ex_div_risk` — for calls, `HIGH`/`MEDIUM` means an ex-dividend date
   falls inside the contract life (early-assignment risk on ITM calls); for
   puts, `DIVIDEND_DROP` just means the stock will gap down by the dividend.
+- `consensus` — `beta`, 52-week high/low, `runway_from_52w_high_pct` (upside
+  left to the 52w high) and shares outstanding. For analyst price targets and
+  rating splits, use the `--news` mode (`analyst_consensus`).
 - `technicals` — RSI/ADX/MACD/EMA50 context: for puts a strong downtrend
   (price well below EMA50, RSI < 35) is a red flag; for calls an explosive
   uptrend (price well above EMA50, RSI > 70) means you get assigned/stocks get

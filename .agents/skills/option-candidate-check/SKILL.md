@@ -60,6 +60,29 @@ need to run the helper, not the raw API.
   fallback for analyst price-target/rating consensus if the API summary
   endpoint is unavailable.
 
+### Macro-event calendar (`events.macro_events`)
+
+The full analysis (Step 5) also lists scheduled **macroeconomic events that fall
+inside the contract window** (today → expiration), each with
+`days_before_expiry`. Sources (both cached 24h in the OS temp dir):
+
+- **Federal Reserve (FOMC / rate decision)** —
+  `https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm`
+  (official calendar; covers the current and next calendar year). Uses the
+  last day of each meeting, i.e. the statement/rate-decision day.
+- **BLS** — `https://www.bls.gov/schedule/{year}/home.htm`
+  for CPI, Employment Situation (Nonfarm Payrolls) and Producer Price Index
+  release dates (full current year).
+- **tradingeconomics.com** —
+  `https://tradingeconomics.com/calendar` is the fallback for CPI / Nonfarm
+  Payrolls / PPI when BLS is unreachable (BLS applies burst rate-limiting and
+  can return HTTP 403; it works on the first daily request). The TE calendar
+  only covers the next ~2 weeks.
+
+If both fail, the `errors` map says so — fall back to a manual web search
+("<TICKER> economic calendar", "FOMC meeting dates 2026") and note it in the
+verdict.
+
 ## Workflow
 
 Run in the current working directory (the skill folder is
@@ -167,13 +190,37 @@ Read each metric in the report:
 - `monthly_yield_pct` / `annualized_yield_pct` — return on collateral.
 - `spread_pct` / `spread_abs` — wide spreads erode the credit; > 10% is poor.
 - `iv_hv_percentile` / `iv_rank` — current IV relative to its own range. High
-  (>= 0.5) means premiums are rich.
+  (>= 0.5) means premiums are rich. If `iv_rank_fallback` is **true**, the
+  `iv_rank` shown is a realised-HV-based proxy (the true IV-rank store is still
+  building history), so treat the value as approximate.
+- `backtest` — realized cross-check over the trailing year: `expiry_itm_rate_pct`
+  (fraction of same-tenor windows where the option was ITM at expiry),
+  `breach_rate_pct` (fraction where the strike was hit intraday at any point),
+  and `breakeven_win_rate_pct` (fraction profitable at expiry including
+  premium — the closest analogue to `probability_of_profit_pct`). Compare it
+  with the model PoP: a large gap means the trailing year's actual price path
+  disagreed with the model — investigate whether that is regime (stock far from
+  where it traded) or a genuinely poor setup. Treat as a sanity cross-check,
+  not gospel: it ignores today's vol/premium and reflects one specific past path.
 - `events.earnings_before_expiry` — if **true**, warn hard: the earnings jump
   is the reason IV is high, and selling into it is paid-for-unhedgeable-gap
-  risk. Strong reason to reject unless the user wants earnings risk.
+  risk. Quantify it with `events.earnings_gap`: `avg_abs_move_pct` /
+  `max_abs_move_pct` is how much the stock actually moved around recent
+  earnings, `avg_signed_move_pct` the direction bias, `avg_surprise_pct` the
+  beat/miss magnitude. Strong reason to reject unless the user wants earnings risk.
 - `events.ex_div_risk` — for calls, `HIGH`/`MEDIUM` means an ex-dividend date
   falls inside the contract life (early-assignment risk on ITM calls); for
   puts, `DIVIDEND_DROP` just means the stock will gap down by the dividend.
+- `events.macro_events` — scheduled **macroeconomic events before expiry**:
+  `FOMC / Fed rate decision`, `CPI`, `Nonfarm Payrolls / Employment Situation`,
+  `PPI`, each with `date` and `days_before_expiry`. A **Fed rate decision
+  inside the window** is the macro analogue of an earnings report: implied vol
+  is elevated around it and the outcome (25/50bp move, hawkish/dovish dot
+  plot) can gap the whole market — treat it like event risk when pricing a
+  short. CPI / jobs-report prints matter most for rate-sensitive, high-beta
+  names; check whether the release is before expiry (it is, by construction)
+  and how close. If the `errors` map is non-empty the calendar was partially
+  unavailable — note the fallback/limitation in the verdict.
 - `consensus` — `beta`, 52-week high/low, `runway_from_52w_high_pct` (upside
   left to the 52w high) and shares outstanding. For analyst price targets and
   rating splits, use the `--news` mode (`analyst_consensus`).

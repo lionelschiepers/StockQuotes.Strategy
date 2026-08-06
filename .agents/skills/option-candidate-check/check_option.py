@@ -42,6 +42,35 @@ SEC_TICKER_MAP_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_TICKER_MAP_CACHE = os.path.join(tempfile.gettempdir(), "sec_company_tickers.json")
 SEC_FILING_FORMS = ("8-K", "10-K", "10-Q", "S-4", "DEF 14A", "13D", "13G", "144")
 NEWS_RSS_URL = "https://news.google.com/rss/search"
+FOMC_URL = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+TE_CALENDAR_URL = "https://tradingeconomics.com/calendar"
+BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+MACRO_CACHE_TTL = 24 * 3600
+FOMC_CACHE = os.path.join(tempfile.gettempdir(), "sqs_fomc_dates.json")
+BLS_CACHE = os.path.join(tempfile.gettempdir(), "sqs_bls_releases.json")
+
+_MONTH_NAMES = {
+    m: i for i, m in enumerate(
+        ["january", "february", "march", "april", "may", "june",
+         "july", "august", "september", "october", "november", "december"],
+        start=1,
+    )
+}
+_MACRO_BLS_NAMES = {
+    "Employment Situation": "Nonfarm Payrolls / Employment Situation",
+    "Consumer Price Index": "CPI",
+    "Producer Price Index": "PPI",
+}
+_MACRO_TAIL_SKIP = re.compile(r"\s*(?:,\s*\d{4}\b|-\s*\d{1,2}\s*,\s*\d{4}\b)")
+_TE_EVENT_MAP = {
+    "non farm payrolls": "Nonfarm Payrolls / Employment Situation",
+    "nonfarm payrolls": "Nonfarm Payrolls / Employment Situation",
+    "cpi": "CPI",
+    "cpi s.a": "CPI",
+    "inflation rate yoy": "CPI",
+    "ppi": "PPI",
+    "ppi yoy": "PPI",
+}
 
 QUOTE_FIELDS_CORE = (
     "symbol,shortName,regularMarketPrice,trailingPE,"
@@ -250,6 +279,189 @@ def fetch_news(symbol, max_items=10):
     return {"news": items}
 
 
+def _cached_json(cache_path, ttl, loader):
+    """Read cache_path if fresh (< ttl seconds), otherwise load and rewrite it."""
+    if os.path.exists(cache_path):
+        try:
+            age = time.time() - os.path.getmtime(cache_path)
+            if age < ttl:
+                with open(cache_path, "r", encoding="utf-8") as fh:
+                    return json.load(fh)
+        except (OSError, ValueError):
+            pass
+    data = loader()
+    try:
+        with open(cache_path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+    except OSError:
+        pass
+    return data
+
+
+def fetch_fomc_dates():
+    """Scheduled FOMC meetings (Fed rate decisions) from the Fed's official
+    calendar page. Uses the last day of each meeting (decision/statement day).
+    Covers the current and next calendar year; cached 24h in the OS temp dir.
+    """
+
+    def load():
+        html = http_get_text(FOMC_URL, timeout=20, retries=1,
+                             headers={"User-Agent": BROWSER_UA})
+        text = re.sub(r"<[^>]+>", " ", html)
+        text = re.sub(r"\s+", " ", text)
+        headings = sorted(
+            ((int(m.group(1)), m.start(), m.end())
+             for m in re.finditer(r"(\d{4}) FOMC Meetings", text)),
+            key=lambda x: x[1],
+        )
+        this_year = datetime.now(timezone.utc).year
+        rx = re.compile(r"\b([A-Z][a-z]{2,8})\s+(\d{1,2})(?!\d)\s*(?:-\s*(\d{1,2})(?!\d))?")
+        out = []
+        for idx, (year, _start, epos) in enumerate(headings):
+            if year not in (this_year, this_year + 1):
+                continue
+            seg_end = headings[idx + 1][1] if idx + 1 < len(headings) else len(text)
+            seg = text[epos:seg_end]
+            cut = seg.find("Back to Top")
+            if cut != -1:
+                seg = seg[:cut]
+            for dm in rx.finditer(seg):
+                if _MACRO_TAIL_SKIP.match(seg[dm.end():]):
+                    continue
+                month = _MONTH_NAMES.get(dm.group(1).lower())
+                if month is None:
+                    continue
+                day = int(dm.group(3)) if dm.group(3) else int(dm.group(2))
+                try:
+                    date = datetime(year, month, day).date()
+                except ValueError:
+                    continue
+                out.append(date)
+        out.sort()
+        uniq = []
+        for d in out:
+            if d not in uniq[-1:]:
+                uniq.append(d)
+        return [{"name": "FOMC / Fed rate decision", "date": d.isoformat(),
+                 "source": "federalreserve.gov"} for d in uniq]
+
+    return _cached_json(FOMC_CACHE, MACRO_CACHE_TTL, load)
+
+
+def fetch_bls_releases():
+    """Scheduled BLS releases for the current year (CPI, Employment Situation,
+    PPI) from the official release schedule. Cached 24h in the OS temp dir.
+    Uses the per-year HTML page (the .asp and .ics mirrors are bot-blocked).
+    """
+
+    def load():
+        headers = {"User-Agent": BROWSER_UA}
+        html = None
+        this_year = datetime.now(timezone.utc).year
+        for year in (this_year, this_year - 1):
+            url = f"https://www.bls.gov/schedule/{year}/home.htm"
+            try:
+                html = http_get_text(url, timeout=20, retries=2, headers=headers)
+                break
+            except Exception:
+                continue
+        if html is None:
+            raise RuntimeError("BLS release schedule unavailable")
+        row_re = re.compile(
+            r'<td class="date-cell"><p>([^<]+)</p></td>\s*'
+            r'<td class="time-cell"><p>([^<]+)</p></td>\s*'
+            r'<td class="desc-cell"><p><strong>([^<]+)</strong>'
+        )
+        out = []
+        for m in row_re.finditer(html):
+            name = m.group(3).strip()
+            short = _MACRO_BLS_NAMES.get(name)
+            if short is None:
+                continue
+            dm = re.search(r"([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})", m.group(1))
+            if not dm:
+                continue
+            month = _MONTH_NAMES.get(dm.group(1).lower())
+            if month is None:
+                continue
+            try:
+                date = datetime(int(dm.group(3)), month, int(dm.group(2))).date()
+            except ValueError:
+                continue
+            out.append({"name": short, "date": date.isoformat(),
+                        "time": m.group(2).strip(), "source": "bls.gov"})
+        out.sort(key=lambda e: e["date"])
+        return out
+
+    return _cached_json(BLS_CACHE, MACRO_CACHE_TTL, load)
+
+
+def fetch_macro_events_te():
+    """Fallback CPI / NFP / PPI schedule from tradingeconomics (near-term US
+    calendar window). Used only when BLS is unreachable.
+    """
+    html = http_get_text(TE_CALENDAR_URL, timeout=30, retries=1,
+                         headers={"User-Agent": BROWSER_UA})
+    row_re = re.compile(r'<tr\b[^>]*data-country="united states"[^>]*>')
+    out = []
+    seen = set()
+    for m in row_re.finditer(html):
+        seg = html[m.start():m.start() + 1600]
+        dm = re.search(r"class='\s*(\d{4}-\d{2}-\d{2})", seg)
+        ev = re.search(r'data-event="([^"]*)"', seg)
+        if not dm or not ev:
+            continue
+        name = ev.group(1).strip().lower()
+        short = _TE_EVENT_MAP.get(name)
+        if short is None:
+            continue
+        key = (short, dm.group(1))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append({"name": short, "date": dm.group(1), "source": "tradingeconomics.com"})
+    out.sort(key=lambda e: e["date"])
+    return out
+
+
+def fetch_macro_events(expiration_dt):
+    """Scheduled macro events between today and expiration (Fed rate decisions,
+    CPI, Nonfarm Payrolls, PPI). Best-effort per source: a source failure is
+    recorded in ``errors`` without failing the report. CPI/NFP/PPI fall back to
+    the tradingeconomics calendar when BLS is unreachable.
+    """
+    exp_date = expiration_dt.date() if hasattr(expiration_dt, "date") else expiration_dt
+    today = datetime.now(timezone.utc).date()
+    events = []
+    errors = {}
+
+    def collect(fn):
+        for e in fn():
+            ev_date = _parse_iso_dt(e["date"]).date()
+            if today <= ev_date <= exp_date:
+                events.append({
+                    "name": e["name"],
+                    "date": e["date"],
+                    "time": e.get("time"),
+                    "days_before_expiry": (exp_date - ev_date).days,
+                    "source": e.get("source"),
+                })
+
+    for label, fn in (("fomc", fetch_fomc_dates), ("bls", fetch_bls_releases)):
+        try:
+            collect(fn)
+        except Exception as exc:
+            errors[label] = str(exc)[:120]
+    if "bls" in errors:
+        try:
+            collect(fetch_macro_events_te)
+            errors["bls"] += " (used tradingeconomics fallback)"
+        except Exception as exc:
+            errors["te"] = str(exc)[:120]
+    events.sort(key=lambda e: (e["date"], e["name"]))
+    return {"count": len(events), "events": events, "errors": errors}
+
+
 def _parse_js_kv_block(text, start_key):
     """Extract a flat JS object literal like priceTargets:{k:v,k:v} and return a dict."""
     start = text.find(f"{start_key}:")
@@ -452,6 +664,160 @@ def _parse_iso_dt(value):
     return _parse_expiration(value)
 
 
+def _parse_bar_date(v):
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, str):
+        try:
+            return datetime.strptime(v[:10], "%Y-%m-%d").date()
+        except ValueError:
+            return None
+    return None
+
+
+def backtest_realized(quotes, strike, option_type, dte, net_premium=None, min_samples=6):
+    """Realized historical check for the same strike + tenor.
+
+    Walks the daily bars treating each bar as a potential expiry, replicating a
+    short option opened ``dte`` calendar days earlier. Reports how often the
+    strike was breached during the window and how often the option was ITM /
+    unprofitable at expiry. If ``net_premium`` is given, also reports the
+    break-even win rate (expiry at/through strike +/- premium). Ignores premium
+    when measuring the strike-based rates, so prefer ``breakeven_win_rate_pct``
+    when comparing to the model's probability of profit. Returns None if fewer
+    than ``min_samples`` windows are available.
+    """
+    bars = []
+    for q in quotes:
+        d = _parse_bar_date(q.get("date"))
+        close = _to_float(q.get("close"))
+        if d is None or close is None:
+            continue
+        low = _to_float(q.get("low"))
+        high = _to_float(q.get("high"))
+        bars.append(
+            {
+                "date": d,
+                "low": low if low is not None else close,
+                "high": high if high is not None else close,
+                "close": close,
+            }
+        )
+    bars.sort(key=lambda b: b["date"])
+    if len(bars) < min_samples + 2:
+        return None
+
+    be = strike
+    if net_premium is not None:
+        be = strike - net_premium if option_type == "put" else strike + net_premium
+
+    total = touched = itm = be_win = 0
+    dtes = []
+    for e in range(1, len(bars)):
+        expiry_date = bars[e]["date"]
+        entry_date = expiry_date - timedelta(days=dte)
+        s = None
+        for idx in range(e):
+            if bars[idx]["date"] >= entry_date:
+                s = idx
+                break
+        if s is None or s >= e:
+            continue
+        actual_days = (expiry_date - bars[s]["date"]).days
+        if actual_days < 0.5 * dte:
+            continue
+        window = bars[s : e + 1]
+        lo = min(b["low"] for b in window)
+        hi = max(b["high"] for b in window)
+        exp_close = bars[e]["close"]
+        if option_type == "put":
+            hit = lo <= strike
+            itm_now = exp_close < strike
+            be_win_now = exp_close > be
+        else:
+            hit = hi >= strike
+            itm_now = exp_close > strike
+            be_win_now = exp_close < be
+        total += 1
+        dtes.append(actual_days)
+        if hit:
+            touched += 1
+        if itm_now:
+            itm += 1
+        if be_win_now:
+            be_win += 1
+
+    if total < min_samples:
+        return None
+    out = {
+        "samples": total,
+        "avg_dte_actual": _safe_round(sum(dtes) / len(dtes)),
+        "breach_rate_pct": _safe_round(touched / total * 100, 1),
+        "expiry_itm_rate_pct": _safe_round(itm / total * 100, 1),
+    }
+    if net_premium is not None:
+        out["breakeven_win_rate_pct"] = _safe_round(be_win / total * 100, 1)
+    return out
+
+
+def fetch_earnings_gap(symbol, quotes):
+    """Realized close-to-close move around recent earnings, from the API summary.
+
+    Uses the quoteSummary ``earnings`` module for past report dates, then
+    measures the next-trading-day close vs the pre-report close on the daily
+    bars. Returns None if there are too few reports or no price data.
+    """
+    url = f"{api_base()}/yahoo-finance-summary?ticker={symbol}&modules=earnings"
+    data = http_get_json(url, timeout=45)
+    chart = ((data.get("earnings") or {}).get("earningsChart") or {})
+    quarterly = chart.get("quarterly") or []
+    if not quarterly:
+        return None
+    report_dates = []
+    for item in quarterly:
+        dt = _parse_iso_dt(item.get("reportedDate"))
+        if dt is not None:
+            report_dates.append(dt.date())
+
+    bars = []
+    for q in quotes:
+        d = _parse_bar_date(q.get("date"))
+        c = _to_float(q.get("close"))
+        if d is not None and c is not None:
+            bars.append((d, c))
+    bars.sort(key=lambda x: x[0])
+    if len(bars) < 10 or not report_dates:
+        return None
+
+    gaps = []
+    for rd in report_dates:
+        pre_idx = None
+        for i, (d, _) in enumerate(bars):
+            if d <= rd:
+                pre_idx = i
+            else:
+                break
+        if pre_idx is None or pre_idx + 1 >= len(bars):
+            continue
+        pre = bars[pre_idx][1]
+        post = bars[pre_idx + 1][1]
+        if pre and pre > 0:
+            gaps.append((post - pre) / pre * 100)
+
+    if len(gaps) < 2:
+        return None
+    abs_gaps = [abs(g) for g in gaps]
+    surprises = [(_to_float(item.get("surprisePct")) or 0.0) for item in quarterly]
+    surprises = [s for s in surprises if s]
+    return {
+        "count": len(gaps),
+        "avg_abs_move_pct": _safe_round(sum(abs_gaps) / len(abs_gaps), 2),
+        "max_abs_move_pct": _safe_round(max(abs_gaps), 2),
+        "avg_signed_move_pct": _safe_round(sum(gaps) / len(gaps), 2),
+        "avg_surprise_pct": _safe_round(sum(surprises) / len(surprises), 2) if surprises else None,
+    }
+
+
 def list_expirations_and_strikes(symbol, option_type):
     chain = fetch_chain(symbol, option_type)
     spot = _to_float((chain.get("quote") or {}).get("regularMarketPrice"))
@@ -635,6 +1001,40 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
     if implied_vol is not None and hv_high is not None and hv_low is not None:
         iv_hv_percentile = compute_iv_hv_percentile(implied_vol, hv_low, hv_high)
 
+    # IV rank fallback: the store is empty until enough scans accumulate, so use
+    # the realised-HV-based percentile as a proxy when rank is unavailable.
+    iv_rank_fallback = False
+    if iv_rank is None and iv_hv_percentile is not None:
+        iv_rank = iv_hv_percentile
+        iv_percentile = iv_hv_percentile
+        iv_rank_fallback = True
+
+    # Realized backtest + earnings gap (best-effort; never fail the report).
+    bars = None
+    try:
+        bars = fetch_history(symbol)
+    except Exception:
+        bars = None
+    backtest = None
+    if bars:
+        try:
+            backtest = backtest_realized(bars, strike, option_type, dte, net_premium=net_premium)
+        except Exception:
+            backtest = None
+    earnings_gap = None
+    if bars:
+        try:
+            earnings_gap = fetch_earnings_gap(symbol, bars)
+        except Exception:
+            earnings_gap = None
+
+    # Macro events (FOMC, CPI, jobs report, PPI) inside the contract window.
+    macro_events = None
+    try:
+        macro_events = fetch_macro_events(expiration_dt)
+    except Exception:
+        macro_events = {"count": 0, "events": [], "errors": {"macro": "unexpected error"}}
+
     report = {
         "symbol": symbol,
         "name": quote.get("shortName", ""),
@@ -674,6 +1074,8 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
             "ex_dividend_date": ex_div_dt.strftime("%Y-%m-%d") if ex_div_dt else None,
             "ex_div_risk": ex_div_risk,
             "dividend_yield": _safe_round(dividend_yield, 4),
+            "earnings_gap": earnings_gap,
+            "macro_events": macro_events,
         },
         "technicals": {
             key: _safe_round(indicators.get(key)) if indicators else None
@@ -689,9 +1091,11 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
             "atm_iv": _safe_round(atm_iv, 4),
             "iv_rank": _safe_round(iv_rank, 3),
             "iv_percentile": _safe_round(iv_percentile, 3),
+            "iv_rank_fallback": iv_rank_fallback,
             "iv_hv_percentile": _safe_round(iv_hv_percentile, 3),
             "realized_drift": _safe_round(drift_raw, 4),
         },
+        "backtest": backtest,
         "returns_risk": {
             "collateral_per_share": _safe_round(collateral),
             "monthly_yield_pct": _safe_round(monthly_yield),

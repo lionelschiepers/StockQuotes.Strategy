@@ -1,0 +1,4 @@
+.cache/
+data/output/
+data/history/*
+!data/history/iv_history.json

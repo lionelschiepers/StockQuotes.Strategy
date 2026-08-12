@@ -16,7 +16,7 @@ EXCLUDE_EARNINGS_BEFORE_EXPIRY: false
 # ── Premium / yield targets ────────────────────────────────────────────────────
 
 # Minimum annualised monthly yield expected from the premium (%)
-TARGET_MONTHLY_YIELD_PCT: 1.3
+TARGET_MONTHLY_YIELD_PCT: 1.0
 
 # Minimum option premium in USD per contract (filters illiquid / penny options)
 MIN_PREMIUM: 0.2
@@ -27,7 +27,7 @@ MIN_PREMIUM: 0.2
 MIN_ABS_DELTA: 0.0
 
 # Maximum absolute delta — for cash-secured puts, keep well below 0.5 (OTM)
-MAX_ABS_DELTA: 0.12
+MAX_ABS_DELTA: 0.30
 
 # ── Days-to-expiry (DTE) window ────────────────────────────────────────────────
 
@@ -51,10 +51,10 @@ MIN_OPEN_INTEREST: 50
 MIN_VOLUME: 5
 
 # Maximum bid/ask spread as a percentage of the mid-price
-MAX_SPREAD_PCT: 10.0
+MAX_SPREAD_PCT: 20.0
 
 # Maximum absolute bid/ask spread in USD
-MAX_SPREAD_ABS: 0.25
+MAX_SPREAD_ABS: 0.5
 
 # ── Result set limits ──────────────────────────────────────────────────────────
 

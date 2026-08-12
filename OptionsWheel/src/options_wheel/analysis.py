@@ -1381,7 +1381,7 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
 
     api_filter = "calls" if option_type == "call" else "puts"
     url = (
-        f"{OPTIONS_URL}?ticker={symbol}&filter={api_filter}&limit=25"
+        f"{OPTIONS_URL}?ticker={symbol}&filter={api_filter}&limit=50"
         f"&expirationDatesCount={MAX_EXPIRATIONS_PER_SYMBOL}"
     )
     data = safe_get(

@@ -2,7 +2,7 @@
 
 # Maximum stock price to consider (avoids high-priced stocks where cash-secured
 # put collateral requirements would be too large for small accounts)
-MAX_PRICE: 150.0
+MAX_PRICE: 600.0
 
 # Minimum average daily trading volume for the underlying stock
 MIN_STOCK_AVG_VOLUME: 500000
@@ -16,7 +16,7 @@ EXCLUDE_EARNINGS_BEFORE_EXPIRY: false
 # ── Premium / yield targets ────────────────────────────────────────────────────
 
 # Minimum annualised monthly yield expected from the premium (%)
-TARGET_MONTHLY_YIELD_PCT: 1.0
+TARGET_MONTHLY_YIELD_PCT: 1.2
 
 # Minimum option premium in USD per contract (filters illiquid / penny options)
 MIN_PREMIUM: 0.2
@@ -27,7 +27,7 @@ MIN_PREMIUM: 0.2
 MIN_ABS_DELTA: 0.0
 
 # Maximum absolute delta — for cash-secured puts, keep well below 0.5 (OTM)
-MAX_ABS_DELTA: 0.30
+MAX_ABS_DELTA: 0.15
 
 # ── Days-to-expiry (DTE) window ────────────────────────────────────────────────
 

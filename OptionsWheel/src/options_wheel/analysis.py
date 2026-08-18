@@ -64,8 +64,8 @@ class NumpyEncoder(json.JSONEncoder):
 # Configuration
 BATCH_SIZE = 50
 HIST_DAYS = 365
-#DEFAULT_API_BASE = "https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api"
-DEFAULT_API_BASE = "http://localhost:7071/api"
+DEFAULT_API_BASE = "https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api"
+#DEFAULT_API_BASE = "http://localhost:7071/api"
 
 
 def _default_endpoint(path_suffix):

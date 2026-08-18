@@ -136,6 +136,27 @@
             }
         }
 
+        .portfolio-summary {
+            list-style: none;
+            cursor: pointer;
+        }
+
+        .portfolio-summary::-webkit-details-marker {
+            display: none;
+        }
+
+        .portfolio-chevron {
+            transition: transform 0.2s ease;
+        }
+
+        details.portfolio-details[open] .portfolio-chevron {
+            transform: rotate(180deg);
+        }
+
+        .portfolio-title {
+            color: var(--text-main);
+        }
+
         #summary > div {
             background: linear-gradient(180deg, var(--summary-start) 0%, var(--summary-end) 100%);
             border: 1px solid var(--line-soft);
@@ -1326,35 +1347,42 @@
                 `).join('');
 
                 panel.innerHTML = `
-                    <div class="flex flex-wrap items-baseline justify-between gap-2 mb-3">
-                        <h2 class="text-lg font-black text-gray-800">Suggested portfolio</h2>
-                        <div class="flex flex-wrap gap-3 text-xs text-gray-500">
-                            <span>${portfolio.position_count} positions</span>
-                            <span>Collateral: ${money(portfolio.total_collateral)}</span>
-                            <span>Credit: ${money(portfolio.total_credit)}</span>
-                            <span>Weighted yield: ${formatPct(portfolio.weighted_monthly_yield_pct)}/mo</span>
-                            <span>Max/sector: ${constraints.PORTFOLIO_MAX_PER_SECTOR ?? 'N/A'}${portfolio.sector_map_available ? '' : ' (no sectors.json)'}</span>
+                    <details class="portfolio-details group">
+                        <summary class="portfolio-summary flex flex-wrap items-center justify-between gap-2 select-none">
+                            <div class="flex items-center gap-2">
+                                <svg class="portfolio-chevron w-4 h-4 text-gray-400 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                                </svg>
+                                <h2 class="text-lg font-black portfolio-title">Suggested portfolio</h2>
+                            </div>
+                            <div class="flex flex-wrap gap-3 text-xs text-gray-500">
+                                <span>${portfolio.position_count} positions</span>
+                                <span>Collateral: ${money(portfolio.total_collateral)}</span>
+                                <span>Credit: ${money(portfolio.total_credit)}</span>
+                                <span>Weighted yield: ${formatPct(portfolio.weighted_monthly_yield_pct)}/mo</span>
+                                <span>Max/sector: ${constraints.PORTFOLIO_MAX_PER_SECTOR ?? 'N/A'}${portfolio.sector_map_available ? '' : ' (no sectors.json)'}</span>
+                            </div>
+                        </summary>
+                        <div class="overflow-x-auto mt-3 pt-3" style="border-top: 1px solid var(--line-soft);">
+                            <table class="min-w-full text-sm">
+                                <thead class="text-xs uppercase tracking-wider text-gray-500 border-b border-gray-200">
+                                    <tr>
+                                        <th class="px-3 py-2 text-left">Symbol</th>
+                                        <th class="px-3 py-2 text-left">Sector</th>
+                                        <th class="px-3 py-2 text-right">Strike</th>
+                                        <th class="px-3 py-2 text-left">Exp</th>
+                                        <th class="px-3 py-2 text-right">DTE</th>
+                                        <th class="px-3 py-2 text-right">Net Prem</th>
+                                        <th class="px-3 py-2 text-right">Collateral</th>
+                                        <th class="px-3 py-2 text-right">Credit</th>
+                                        <th class="px-3 py-2 text-right">Mo Yield%</th>
+                                        <th class="px-3 py-2 text-right">Score</th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-gray-100">${rows}</tbody>
+                            </table>
                         </div>
-                    </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full text-sm">
-                            <thead class="text-xs uppercase tracking-wider text-gray-500 border-b border-gray-200">
-                                <tr>
-                                    <th class="px-3 py-2 text-left">Symbol</th>
-                                    <th class="px-3 py-2 text-left">Sector</th>
-                                    <th class="px-3 py-2 text-right">Strike</th>
-                                    <th class="px-3 py-2 text-left">Exp</th>
-                                    <th class="px-3 py-2 text-right">DTE</th>
-                                    <th class="px-3 py-2 text-right">Net Prem</th>
-                                    <th class="px-3 py-2 text-right">Collateral</th>
-                                    <th class="px-3 py-2 text-right">Credit</th>
-                                    <th class="px-3 py-2 text-right">Mo Yield%</th>
-                                    <th class="px-3 py-2 text-right">Score</th>
-                                </tr>
-                            </thead>
-                            <tbody class="divide-y divide-gray-100">${rows}</tbody>
-                        </table>
-                    </div>
+                    </details>
                 `;
                 panel.classList.remove('hidden');
             };

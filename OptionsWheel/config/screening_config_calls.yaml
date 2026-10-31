@@ -10,7 +10,9 @@ MIN_STOCK_AVG_VOLUME: 500000
 # Minimum market capitalisation in USD (filters out micro-caps)
 MIN_MARKET_CAP: 500000000
 
-# If true, skip any contract whose expiry falls after the next earnings date
+# If true, skip any contract whose expiry falls after the next earnings date.
+# When false, the stock's historical earnings move is added to the forecast
+# volatility, so earnings-spanning calls get a lower PoP / safety score.
 EXCLUDE_EARNINGS_BEFORE_EXPIRY: false
 
 # ── Premium / yield targets ────────────────────────────────────────────────────
@@ -89,6 +91,11 @@ FORECAST_HV_WEIGHT: 0.5
 # Haircut applied to IV before blending it into forecast volatility
 FORECAST_IV_HAIRCUT: 0.85
 
+# Annual expected return of the underlying used for PoP / EV (real-world drift).
+# A constant replaces the old trailing-1-year momentum, which made recent
+# winners look safer than they are.
+REAL_WORLD_DRIFT: 0.07
+
 # ── Volatility filter ─────────────────────────────────────────────────────────
 
 # Minimum IV Rank (0–1); filters out low-volatility environments where premium
@@ -103,28 +110,24 @@ FILTER_DOWNTRENDS: false
 # If true, skip call contracts on stocks experiencing extreme bullish momentum
 FILTER_UPTRENDS: true
 
-# ── Scoring weights (must roughly sum to 100) ─────────────────────────────────
+# ── Scoring weights ───────────────────────────────────────────────────────────
+# The score is the weighted mean of 0–1 components, scaled to 0–100, so weights
+# are relative. Components (see metrics.score_components):
+#   SAFETY  strike distance in forecast standard deviations (2σ = full marks)
+#   VOL     calmer underlyings: full marks at IV <= 40%, zero at >= 100%
+#   YIELD   monthly yield vs TARGET_MONTHLY_YIELD_PCT, capped at the target
+#   DTE     closeness to the middle of the MIN_DTE..MAX_DTE window
+#   VRP     ATM implied / realised volatility (1.3x = full marks)
+#   OI / VOLUME / SPREAD  execution quality
 
-# Weight given to the yield component of the composite score
-SCORE_WEIGHT_YIELD: 30
-
-# Weight given to the OTM distance component (more OTM = less assignment risk)
-SCORE_WEIGHT_OTM: 20
-
-# Weight given to open interest (proxy for liquidity depth)
-SCORE_WEIGHT_OI: 15
-
-# Weight given to daily volume
-SCORE_WEIGHT_VOLUME: 10
-
-# Weight given to bid/ask spread tightness
-SCORE_WEIGHT_SPREAD: 15
-
-# Weight given to DTE (rewards contracts in the sweet-spot theta-decay window)
+SCORE_WEIGHT_SAFETY: 30
+SCORE_WEIGHT_VOL: 15
+SCORE_WEIGHT_YIELD: 15
 SCORE_WEIGHT_DTE: 10
-
-# Weight given to implied volatility rank
-SCORE_WEIGHT_IV: 10
+SCORE_WEIGHT_VRP: 5
+SCORE_WEIGHT_OI: 10
+SCORE_WEIGHT_VOLUME: 5
+SCORE_WEIGHT_SPREAD: 10
 
 # ── Portfolio construction ─────────────────────────────────────────────────────
 

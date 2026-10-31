@@ -7,7 +7,6 @@ on:
     paths:
       - ".github/workflows/deploy-pages.yml"
       - "OptionsWheel/web/**"
-      - "OptionsWheel/data/output/**"
       - "OptionsWheel/config/**"
   workflow_dispatch:
 
@@ -19,6 +18,9 @@ permissions:
 concurrency:
   group: "pages"
   cancel-in-progress: true
+
+env:
+  DATA_BRANCH: ow-data
 
 jobs:
   deploy:
@@ -38,12 +40,19 @@ jobs:
         shell: bash
         run: |
           rm -rf _site
-          mkdir -p _site
+          mkdir -p _site/data/output
 
           cp -R OptionsWheel/web _site/web
-          mkdir -p _site/data
-          cp -R OptionsWheel/data/output _site/data/output
           cp -R OptionsWheel/config _site/config
+
+          # Scan results are not committed to main; publish the latest ones
+          # saved by the analysis workflow on the data branch.
+          if git ls-remote --exit-code --heads origin "$DATA_BRANCH" > /dev/null; then
+            git fetch --depth=1 origin "$DATA_BRANCH"
+            git archive FETCH_HEAD output | tar -x -C _site/data
+          else
+            echo "::warning::No $DATA_BRANCH branch yet; run the analysis workflow first."
+          fi
 
           cat > _site/index.html <<'HTML'
           <!doctype html>

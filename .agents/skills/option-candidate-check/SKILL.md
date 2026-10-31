@@ -15,15 +15,19 @@ the same risk metrics the screener uses, then renders a clear verdict.
 - `check_option.py` — helper script. Run it with `python` (see below). It
   locates the `options_wheel` module automatically and needs `requests`.
 - Reference for the underlying logic: `OptionsWheel/src/options_wheel/analysis.py`
-  and `OptionsWheel/src/options_wheel/metrics.py`.
-- Screen thresholds live in `OptionsWheel/config/screening_config_puts.yaml`
-  (puts) and `OptionsWheel/config/screening_config_calls.yaml` (calls).
+  (`assess_contract_risk` is shared with the screener),
+  `OptionsWheel/src/options_wheel/metrics.py` and
+  `OptionsWheel/src/options_wheel/earnings.py`.
+- Screen thresholds, costs, the volatility-forecast blend, the drift and the
+  score weights live in `OptionsWheel/config/screening_config_puts.yaml` (puts)
+  and `OptionsWheel/config/screening_config_calls.yaml` (calls). The helper
+  loads the same file as the screener, so its PoP/EV/score match the screen.
 
 ## API
 
-Base URL comes from the `OW_API_BASE` env var, defaulting to
-`http://localhost:7071/api`. If the helper fails to connect, ask the user to
-start the API (or set `OW_API_BASE`).
+Base URL comes from the `OW_API_BASE` env var, defaulting to the screener's
+`DEFAULT_API_BASE` in `analysis.py` (the hosted Azure API). Set
+`OW_API_BASE=http://localhost:7071/api` to use a local API instead.
 
 - Quote: `GET {base}/yahoo-finance?symbols=TICKER&fields=symbol,shortName,regularMarketPrice,trailingPE,averageDailyVolume3Month,marketCap,trailingAnnualDividendYield,fiftyDayAverage,earningsTimestamp,earningsTimestampStart,earningsTimestampEnd,dividendDate,trailingAnnualDividendRate`
   Returns a JSON array with one object per symbol.
@@ -40,7 +44,8 @@ start the API (or set `OW_API_BASE`).
   (`financialData`), short interest / beta / valuation (`defaultKeyStatistics`),
   and rating breakdown over time (`recommendationTrend`). `modules` defaults to
   those three if omitted. Any module from Yahoo's quoteSummary is allowed
-  (max 20).
+  (max 20); `modules=earnings` gives the last four report dates
+  (`earnings.earningsChart.quarterly[].reportedDate`) used for earnings moves.
 
 The helper handles all of the calls and computes every metric. You normally only
 need to run the helper, not the raw API.
@@ -160,18 +165,20 @@ back to a manual web search ("<TICKER> stock news", "<TICKER> earnings date",
 "<TICKER> lawsuit") and note it in the verdict.
 
 ### Step 7 — Interpret and give a verdict
-Use the screen thresholds from the config YAMLs as reference:
+Use the screen thresholds from the config YAMLs as reference (the YAML wins if
+this table is out of date):
 
 | Check | Put | Call |
 |---|---|---|
-| |Delta| band | 0.00–0.12 | 0.00–0.50 |
+| |Delta| band | 0.00–0.15 | 0.00–0.50 |
 | OTM | >= 5% | >= 5% |
 | DTE window | 4–60 | 7–60 |
 | Open interest | >= 50 | >= 100 |
 | Daily volume | >= 5 | >= 5 |
-| Spread | <= 10% and <= $0.25 | <= 10% and <= $0.25 |
-| Monthly yield target | >= 1.3% | >= 1.3% |
+| Spread | <= 20% and <= $0.50 | <= 10% and <= $0.25 |
+| Monthly yield target | >= 1.2% | >= 1.3% |
 | IV rank | >= 0.30 | >= 0.30 |
+| Earnings before expiry | excluded | allowed (jump priced in) |
 
 Read each metric in the report:
 
@@ -179,14 +186,22 @@ Read each metric in the report:
   safer but smaller premium. Too close to ATM (|delta| > 0.35–0.4) = high
   assignment risk.
 - `probability_of_profit_pct` — chance the short expires profitable (real-world
-  measure). Higher is better; < 60% is weak for a selling setup.
+  measure, constant `model_drift` from the config). Higher is better; < 60% is
+  weak for a selling setup. Graded scans show the model running a few points
+  above realised win rates, so treat it as optimistic.
 - `ev_per_share` / `expected_loss_per_share` — net premium minus expected
   assignment loss. Positive EV (with `credit_risk_ratio` > 1) is the core edge.
-- `vrp_ratio` — IV vs forecast (realised-based) vol. **Above 1** means the
-  option is priced above where the stock actually moves: the seller's edge.
-  Below 1 you are underpaid for the risk.
-- `sigma_distance` — how many standard deviations the strike is from spot.
-  Higher = safer. 0.3–0.5 is moderate; > 0.5 is far.
+- `vrp_ratio` — the symbol's ATM IV vs its realised volatility
+  (`realized_vol`, a blend of short and long HV). **Above 1** means options are
+  priced above where the stock actually moves: the seller's edge. Below 1 you
+  are underpaid for the risk.
+- `sigma_distance` — how many forecast standard deviations (over the life of
+  the contract) the strike is from spot. Higher = safer: < 1 is close,
+  1–1.5 moderate, >= 2 far (full marks in the score).
+- `score` / `score_components` — the screener's 0–100 composite. Each
+  component is 0–1: `safety` (sigma distance), `vol` (penalises very high IV),
+  `yield` (capped at the target, so outsized yield earns nothing extra),
+  `dte`, `vrp`, `oi`, `volume`, `spread`. A low component explains a low score.
 - `monthly_yield_pct` / `annualized_yield_pct` — return on collateral.
 - `spread_pct` / `spread_abs` — wide spreads erode the credit; > 10% is poor.
 - `iv_hv_percentile` / `iv_rank` — current IV relative to its own range. High
@@ -204,10 +219,15 @@ Read each metric in the report:
   not gospel: it ignores today's vol/premium and reflects one specific past path.
 - `events.earnings_before_expiry` — if **true**, warn hard: the earnings jump
   is the reason IV is high, and selling into it is paid-for-unhedgeable-gap
-  risk. Quantify it with `events.earnings_gap`: `avg_abs_move_pct` /
-  `max_abs_move_pct` is how much the stock actually moved around recent
-  earnings, `avg_signed_move_pct` the direction bias, `avg_surprise_pct` the
-  beat/miss magnitude. Strong reason to reject unless the user wants earnings risk.
+  risk. Graded scans confirm it: puts spanning earnings lost money on average
+  while the rest made money. Quantify it with `events.earnings_gap`:
+  `avg_abs_move_pct` / `max_abs_move_pct` is how much the stock moved from the
+  close before to the close after each of the last reports,
+  `avg_signed_move_pct` the direction bias, `avg_surprise_pct` the beat/miss
+  magnitude and `jump_pct` the typical move net of normal daily noise. When
+  `events.earnings_jump_in_forecast` is true that jump is already inside
+  `forecast_vol`, PoP and EV. Strong reason to reject a put unless the user
+  wants earnings risk.
 - `events.ex_div_risk` — for calls, `HIGH`/`MEDIUM` means an ex-dividend date
   falls inside the contract life (early-assignment risk on ITM calls); for
   puts, `DIVIDEND_DROP` just means the stock will gap down by the dividend.

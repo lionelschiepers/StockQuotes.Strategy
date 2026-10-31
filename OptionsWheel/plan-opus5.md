@@ -46,7 +46,7 @@ both YAML configs, and the last run outputs.
    weight in `Score`.
    - **Status: Implemented.** Scoring now uses the variance risk premium
      (IV / forecast vol ratio) via `metrics.variance_risk_premium` instead of
-     raw IV level.
+     raw IV level. *Superseded by the 0-100 composite in the second pass.*
 
 ## Highest-leverage realistic improvements
 
@@ -66,7 +66,8 @@ both YAML configs, and the last run outputs.
    earnings allowed, you actively select contracts whose high IV *is* the
    earnings gap risk - you're paid for a jump you can't hedge.
    - **Status: Verified.** Confirmed the flag is wired correctly end-to-end;
-     left as a config choice per option type.
+     left as a config choice per option type. *Second pass: enabled for puts
+     on graded evidence.*
 
 7. **Build a real IV Rank.** `compute_iv_hv_percentile` is IV vs. HV range and
    is honestly labeled as such, but it's noisy. Since the scan runs on a
@@ -143,12 +144,11 @@ both YAML configs, and the last run outputs.
 - README references `analyze_stocks.py`, `display_results.py`,
   `tickers.json`, `screening_config.json`, `index.html` - none of those paths
   exist anymore.
-  - **Status: Not addressed** (out of scope for this pass; repo-root README,
-    not part of the OptionsWheel code changes).
+  - **Status: Fixed (second pass).** README rewritten for the current layout.
 - `is_downtrend` computes
   `sum([below_ema, strong_trend and below_ema, weak_rsi and below_ema]) >= 2`,
   which just means "below EMA and (trending or weak RSI)". Write it that way.
-  - **Status: Not addressed.**
+  - **Status: Fixed (second pass).**
 
 ## Implementation summary
 
@@ -158,3 +158,36 @@ the engineering-hygiene fixes (tests, dead-code fix, duplicate config
 removal). Points 2, 9, and the README/`is_downtrend` hygiene items were left
 for a future pass since they are tuning/config decisions or lower priority
 relative to the rest of the plan.
+
+## Second pass: calibrated against graded scans
+
+Eight archived put scans (2026-08-17 to 2026-10-22, 2,477 unique contracts,
+one bullish regime) were graded against real prices. Findings and changes:
+
+- **Grader was wrong on splits.** Yahoo history is split-adjusted, so a
+  post-split close was compared with a pre-split strike (APH). `outcomes.py`
+  now rescales prices into scan-date shares. It also dedupes contracts seen in
+  several scans, compares realised win rate / P/L with model PoP / EV, and
+  reports a managed P/L (profit target + stop). A `--regrade` flag was added.
+- **Earnings trades were the losers.** PASS puts made +$35/contract without
+  earnings before expiry and lost $107 with. The model rated them best because
+  realised vol has no jump. `earnings.py` measures the stock's last four
+  earnings moves. The jump is added to the realised leg of the forecast, which
+  cut the overstated PoP (87.8% vs 77% realised). Puts now set
+  `EXCLUDE_EARNINGS_BEFORE_EXPIRY: true` (item 6).
+- **Drift.** The trailing-1y momentum drift made hot stocks look safer. It was
+  replaced by a constant `REAL_WORLD_DRIFT` (7%/yr).
+- **Score.** Replaced with a 0-100 weighted composite (weights in the YAML).
+  The yield component is capped at the target, and very high IV is penalised.
+  On non-earnings trades the old score's top quintile lost money (-12%
+  annualised) while the new one's earned +9% (in-sample).
+- **Fat tails tested and rejected.** A vol-of-vol mixture made calibration
+  worse (Brier 0.147 to 0.152); the forecast blend was left at 0.5 / 0.85.
+- **Shared model.** The candidate-check skill now uses the screener's config,
+  risk model and earnings jump instead of hard-coded copies.
+- **CI.** History persists on the `ow-data` branch (`datasync.py`). The
+  analysis runs once per weekday mid-session, runs tests and grades scans.
+  The broken Pages deploy now reads outputs from `ow-data`.
+
+Item 2 was addressed separately ("Relax puts screen": |delta| <= 0.15,
+1.2%/mo). Item 9 (wheel "would I own it?" gate) is still open.

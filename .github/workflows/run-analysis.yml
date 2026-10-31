@@ -3,29 +3,22 @@ name: Run OptionsWheel analysis
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 14 * * *"
-    - cron: "0 15 * * *"
-  push:
-    branches:
-      - main
-    paths:
-      - ".github/workflows/run-analysis.yml"
-      - "OptionsWheel/analyze.cmd"
-      - "OptionsWheel/analyze_calls.py"
-      - "OptionsWheel/analyze_puts.py"
-      - "OptionsWheel/requirements.txt"
-      - "OptionsWheel/src/**"
-      - "OptionsWheel/config/**"
-      - "OptionsWheel/data/**"
+    # 17:30 UTC = mid-session in New York in both EST and EDT, weekdays only.
+    - cron: "30 17 * * 1-5"
 
 permissions:
-  contents: read
+  contents: write # push scan history to the data branch
   pages: write
   id-token: write
 
 concurrency:
-  group: "optionswheel-analysis-${{ github.ref }}"
-  cancel-in-progress: true
+  # Never cancel a run half-way through pushing the data branch.
+  group: optionswheel-analysis
+  cancel-in-progress: false
+
+env:
+  DATA_BRANCH: ow-data
+  PYTHONPATH: src
 
 jobs:
   analysis:
@@ -47,9 +40,33 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: OptionsWheel/requirements.txt
 
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest -q
+
+      - name: Check out data branch
+        working-directory: .
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898699+github-actions[bot]@users.noreply.github.com"
+          data_dir="$RUNNER_TEMP/ow-data"
+          if git ls-remote --exit-code --heads origin "$DATA_BRANCH" > /dev/null; then
+            git fetch --depth=1 origin "$DATA_BRANCH:$DATA_BRANCH"
+            git worktree add "$data_dir" "$DATA_BRANCH"
+          else
+            echo "Creating orphan branch $DATA_BRANCH"
+            git worktree add --detach "$data_dir"
+            git -C "$data_dir" checkout --orphan "$DATA_BRANCH"
+            git -C "$data_dir" rm -rf --quiet .
+          fi
+
+      - name: Restore history
+        run: python -m options_wheel.datasync pull "$RUNNER_TEMP/ow-data"
 
       - name: Analyze CALL options
         run: python analyze_calls.py
@@ -57,18 +74,36 @@ jobs:
       - name: Analyze PUT options
         run: python analyze_puts.py
 
+      - name: Grade expired scans
+        # Grading is a feedback report; an API hiccup must not lose today's scan.
+        continue-on-error: true
+        run: |
+          python -m options_wheel.outcomes --type call
+          python -m options_wheel.outcomes --type put
+
+      - name: Save history to data branch
+        run: |
+          data_dir="$RUNNER_TEMP/ow-data"
+          python -m options_wheel.datasync push "$data_dir"
+          cd "$data_dir"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No data changes."
+            exit 0
+          fi
+          git commit --quiet -m "data: scan $(date -u +%F)"
+          git push origin "HEAD:$DATA_BRANCH"
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
       - name: Build publish folder
-        shell: bash
         working-directory: .
         run: |
           rm -rf _site
-          mkdir -p _site
+          mkdir -p _site/data
 
           cp -R OptionsWheel/web _site/web
-          mkdir -p _site/data
           cp -R OptionsWheel/data/output _site/data/output
           cp -R OptionsWheel/config _site/config
 

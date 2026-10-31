@@ -14,9 +14,11 @@ import random
 import argparse
 import traceback
 
-from options_wheel.iv_history import IVHistoryStore, extract_atm_iv
+from options_wheel.earnings import earnings_moves, jump_size, report_dates_from_summary
+from options_wheel.iv_history import IV_HISTORY_DIRNAME, IVHistoryStore, extract_atm_iv
 from options_wheel.metrics import (
     collateral_per_share,
+    composite_score,
     credit_risk_ratio,
     expected_itm_payoff,
     forecast_volatility,
@@ -24,6 +26,8 @@ from options_wheel.metrics import (
     net_credit,
     option_delta,
     probability_of_profit,
+    realized_vol_blend,
+    score_components,
     sigma_distance,
     simple_yields,
     variance_risk_premium,
@@ -80,6 +84,7 @@ HIST_URL = os.environ.get("OW_HIST_URL", _default_endpoint("yahoo-finance-histor
 OPTIONS_URL = os.environ.get(
     "OW_OPTIONS_URL", _default_endpoint("yahoo-finance-stock-options")
 )
+SUMMARY_URL = os.environ.get("OW_SUMMARY_URL", _default_endpoint("yahoo-finance-summary"))
 
 SLEEP_TIME = 0.0
 MAX_WORKERS = 4
@@ -157,17 +162,31 @@ DEFAULT_SCREENING_CONFIG = {
     "FILTER_UPTRENDS": True,
     "FORECAST_HV_WEIGHT": 0.5,
     "FORECAST_IV_HAIRCUT": 0.85,
+    "REAL_WORLD_DRIFT": 0.07,
     "PORTFOLIO_MAX_POSITIONS": 10,
     "PORTFOLIO_MAX_PER_SECTOR": 2,
     "PORTFOLIO_COLLATERAL_BUDGET": 0.0,
     "PORTFOLIO_MAX_PCT_PER_POSITION": 25.0,
-    "SCORE_WEIGHT_YIELD": 30,
-    "SCORE_WEIGHT_OTM": 20,
-    "SCORE_WEIGHT_OI": 15,
-    "SCORE_WEIGHT_VOLUME": 10,
-    "SCORE_WEIGHT_SPREAD": 15,
+    "SCORE_WEIGHT_SAFETY": 30,
+    "SCORE_WEIGHT_VOL": 15,
+    "SCORE_WEIGHT_YIELD": 15,
     "SCORE_WEIGHT_DTE": 10,
-    "SCORE_WEIGHT_IV": 10,
+    "SCORE_WEIGHT_VRP": 5,
+    "SCORE_WEIGHT_OI": 10,
+    "SCORE_WEIGHT_VOLUME": 5,
+    "SCORE_WEIGHT_SPREAD": 10,
+}
+
+# Config key -> score_components() name.
+SCORE_WEIGHT_KEYS = {
+    "SCORE_WEIGHT_SAFETY": "safety",
+    "SCORE_WEIGHT_VOL": "vol",
+    "SCORE_WEIGHT_YIELD": "yield",
+    "SCORE_WEIGHT_DTE": "dte",
+    "SCORE_WEIGHT_VRP": "vrp",
+    "SCORE_WEIGHT_OI": "oi",
+    "SCORE_WEIGHT_VOLUME": "volume",
+    "SCORE_WEIGHT_SPREAD": "spread",
 }
 
 
@@ -208,12 +227,14 @@ def load_screening_config(defaults, option_type="put"):
 
     if os.path.exists(config_path):
         try:
-            with open(config_path, "r") as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 file_cfg = yaml.safe_load(f)
             if isinstance(file_cfg, dict):
                 for key, value in file_cfg.items():
                     if key in cfg:
                         cfg[key] = _coerce_config_value(cfg[key], value)
+                    else:
+                        print(f"Warning: ignoring unknown config key {key} in {config_path}")
         except Exception as e:
             print(f"Warning: could not load {config_path}: {e}")
 
@@ -310,6 +331,8 @@ def validate_screening_config(cfg):
         errors.append("FORECAST_HV_WEIGHT must be in [0, 1].")
     if cfg["FORECAST_IV_HAIRCUT"] <= 0 or cfg["FORECAST_IV_HAIRCUT"] > 2:
         errors.append("FORECAST_IV_HAIRCUT must be in (0, 2].")
+    if cfg["REAL_WORLD_DRIFT"] < -0.5 or cfg["REAL_WORLD_DRIFT"] > 0.5:
+        errors.append("REAL_WORLD_DRIFT must be in [-0.5, 0.5].")
     if cfg["PORTFOLIO_MAX_POSITIONS"] < 0 or cfg["PORTFOLIO_MAX_POSITIONS"] > 100:
         errors.append("PORTFOLIO_MAX_POSITIONS must be in [0, 100].")
     if cfg["PORTFOLIO_MAX_PER_SECTOR"] < 0 or cfg["PORTFOLIO_MAX_PER_SECTOR"] > 100:
@@ -322,13 +345,11 @@ def validate_screening_config(cfg):
     ):
         errors.append("PORTFOLIO_MAX_PCT_PER_POSITION must be in [0, 100].")
 
-    for weight_key in (
-        "SCORE_WEIGHT_YIELD", "SCORE_WEIGHT_OTM", "SCORE_WEIGHT_OI",
-        "SCORE_WEIGHT_VOLUME", "SCORE_WEIGHT_SPREAD", "SCORE_WEIGHT_DTE",
-        "SCORE_WEIGHT_IV",
-    ):
+    for weight_key in SCORE_WEIGHT_KEYS:
         if cfg[weight_key] < 0:
             errors.append(f"{weight_key} must be >= 0.")
+    if sum(cfg[key] for key in SCORE_WEIGHT_KEYS) <= 0:
+        errors.append("At least one SCORE_WEIGHT_* must be > 0.")
 
     if errors:
         raise ValueError("Invalid screening configuration:\n- " + "\n- ".join(errors))
@@ -346,11 +367,10 @@ def init_screening_config(option_type="put"):
     global OPTIONS_REQUEST_TIMEOUT, OPTIONS_MAX_RETRIES
     global COMMISSION_PER_CONTRACT, SLIPPAGE_PCT_OF_SPREAD, MAX_SPREAD_ABS
     global RISK_FREE_RATE, DIVIDEND_YIELD, MIN_IV_RANK, FILTER_DOWNTRENDS, FILTER_UPTRENDS
-    global FORECAST_HV_WEIGHT, FORECAST_IV_HAIRCUT
+    global FORECAST_HV_WEIGHT, FORECAST_IV_HAIRCUT, REAL_WORLD_DRIFT
     global PORTFOLIO_MAX_POSITIONS, PORTFOLIO_MAX_PER_SECTOR
     global PORTFOLIO_COLLATERAL_BUDGET, PORTFOLIO_MAX_PCT_PER_POSITION
-    global SCORE_WEIGHT_YIELD, SCORE_WEIGHT_OTM, SCORE_WEIGHT_OI
-    global SCORE_WEIGHT_VOLUME, SCORE_WEIGHT_SPREAD, SCORE_WEIGHT_DTE, SCORE_WEIGHT_IV
+    global SCORE_WEIGHTS
 
     SCREENING_CONFIG = validate_screening_config(
         load_screening_config(DEFAULT_SCREENING_CONFIG, option_type=option_type)
@@ -384,24 +404,21 @@ def init_screening_config(option_type="put"):
     FILTER_UPTRENDS = SCREENING_CONFIG.get("FILTER_UPTRENDS", True)
     FORECAST_HV_WEIGHT = SCREENING_CONFIG["FORECAST_HV_WEIGHT"]
     FORECAST_IV_HAIRCUT = SCREENING_CONFIG["FORECAST_IV_HAIRCUT"]
+    REAL_WORLD_DRIFT = SCREENING_CONFIG["REAL_WORLD_DRIFT"]
     PORTFOLIO_MAX_POSITIONS = SCREENING_CONFIG["PORTFOLIO_MAX_POSITIONS"]
     PORTFOLIO_MAX_PER_SECTOR = SCREENING_CONFIG["PORTFOLIO_MAX_PER_SECTOR"]
     PORTFOLIO_COLLATERAL_BUDGET = SCREENING_CONFIG["PORTFOLIO_COLLATERAL_BUDGET"]
     PORTFOLIO_MAX_PCT_PER_POSITION = SCREENING_CONFIG["PORTFOLIO_MAX_PCT_PER_POSITION"]
-    SCORE_WEIGHT_YIELD = SCREENING_CONFIG["SCORE_WEIGHT_YIELD"]
-    SCORE_WEIGHT_OTM = SCREENING_CONFIG["SCORE_WEIGHT_OTM"]
-    SCORE_WEIGHT_OI = SCREENING_CONFIG["SCORE_WEIGHT_OI"]
-    SCORE_WEIGHT_VOLUME = SCREENING_CONFIG["SCORE_WEIGHT_VOLUME"]
-    SCORE_WEIGHT_SPREAD = SCREENING_CONFIG["SCORE_WEIGHT_SPREAD"]
-    SCORE_WEIGHT_DTE = SCREENING_CONFIG["SCORE_WEIGHT_DTE"]
-    SCORE_WEIGHT_IV = SCREENING_CONFIG["SCORE_WEIGHT_IV"]
+    SCORE_WEIGHTS = {
+        component: SCREENING_CONFIG[key] for key, component in SCORE_WEIGHT_KEYS.items()
+    }
 
 
 # Default initialization (for backward compatibility when imported)
 init_screening_config("put")
 
-IV_HISTORY_PATH = os.path.join(DATA_HISTORY_DIR, "iv_history.json")
-IV_HISTORY_STORE = IVHistoryStore(IV_HISTORY_PATH).load()
+IV_HISTORY_DIR = os.path.join(DATA_HISTORY_DIR, IV_HISTORY_DIRNAME)
+IV_HISTORY_STORE = IVHistoryStore(IV_HISTORY_DIR).load()
 CURRENT_SCAN_DATE = None
 
 _thread_local = threading.local()
@@ -819,6 +836,10 @@ def fetch_historical_indicators(symbol):
     else:
         realized_drift = None
 
+    closes = []
+    if "date" in df.columns:
+        closes = [(str(d)[:10], float(c)) for d, c in zip(df["date"], close)]
+
     return {
         "ema50": float(ema50) if not np.isnan(ema50) else None,
         "rsi": float(rsi) if not np.isnan(rsi) else None,
@@ -832,6 +853,7 @@ def fetch_historical_indicators(symbol):
         "hv_high": float(hv_high) if not np.isnan(hv_high) else None,
         "hv_low": float(hv_low) if not np.isnan(hv_low) else None,
         "realized_drift": realized_drift,
+        "closes": closes,
     }
 
 
@@ -862,14 +884,12 @@ def is_downtrend(indicators):
     if price is None or ema50 is None:
         return False
 
-    # Strong downtrend: price well below EMA50, high ADX (trending), and oversold RSI
-    below_ema = price < ema50 * 0.95  # More than 5% below EMA50
+    # Strong downtrend: price more than 5% below EMA50, confirmed by either a
+    # trending ADX or an oversold RSI.
+    below_ema = price < ema50 * 0.95
     strong_trend = adx is not None and adx > 25
     weak_rsi = rsi is not None and rsi < 35
-
-    # Need at least 2 of 3 signals to flag as downtrend
-    signals = sum([below_ema, strong_trend and below_ema, weak_rsi and below_ema])
-    return signals >= 2
+    return below_ema and (strong_trend or weak_rsi)
 
 
 def is_uptrend(indicators):
@@ -989,53 +1009,77 @@ def _dte_from_expiration(expiration_dt, now_dt):
     return max(0, int((expiration_dt.date() - now_dt.date()).days))
 
 
-def _normal_cdf(x):
-    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+def fetch_earnings_jump(symbol, indicators, as_of=None):
+    """Typical earnings jump (log move) from the stock's last four reports.
 
-
-def _years_to_expiration(expiration_dt, now_dt):
-    if expiration_dt is None:
+    Returns ``None`` when the report dates or the price history are missing.
+    """
+    closes = (indicators or {}).get("closes") or []
+    if not closes:
         return None
-
-    if expiration_dt.tzinfo is None:
-        expiration_dt = expiration_dt.replace(tzinfo=timezone.utc)
-    else:
-        expiration_dt = expiration_dt.astimezone(timezone.utc)
-
-    if now_dt.tzinfo is None:
-        now_dt = now_dt.replace(tzinfo=timezone.utc)
-    else:
-        now_dt = now_dt.astimezone(timezone.utc)
-
-    expiry_close = datetime(
-        expiration_dt.year,
-        expiration_dt.month,
-        expiration_dt.day,
-        20,
-        0,
-        0,
-        tzinfo=timezone.utc,
+    data = safe_get(
+        f"{SUMMARY_URL}?ticker={symbol}&modules=earnings",
+        timeout=REQUEST_TIMEOUT,
+        max_retries=MAX_RETRIES,
     )
-    seconds = (expiry_close - now_dt).total_seconds()
-    if seconds <= 0:
+    report_dates = report_dates_from_summary(data)
+    if not report_dates:
         return None
-    return max(seconds / (365.0 * 24.0 * 60.0 * 60.0), 1.0 / (365.0 * 24.0 * 60.0))
+    moves = earnings_moves(report_dates, closes, before=as_of or datetime.now(timezone.utc))
+    return jump_size(moves, realized_vol_blend(indicators.get("hv_current"), indicators.get("hv_long")))
 
 
-def _score_variance_risk_premium(vrp_ratio):
-    if vrp_ratio is None:
-        return 0.0
-    scaled = (vrp_ratio - 1.0) / 0.2
-    return max(0.0, min(scaled, 1.0)) * SCORE_WEIGHT_IV
+def assess_contract_risk(
+    price,
+    strike,
+    implied_vol,
+    t_years,
+    net_premium,
+    indicators,
+    option_type="put",
+    earnings_before_expiry=False,
+    earnings_jump=None,
+):
+    """Real-world risk metrics shared by the screener and the candidate checker.
 
+    When the contract spans an earnings report the historical earnings jump is
+    added to the realised-volatility leg of the forecast. Without a jump
+    estimate the contract's own IV (which prices the event) is used as a floor.
+    """
+    indicators = indicators or {}
+    forecast_vol = forecast_volatility(
+        implied_vol,
+        indicators.get("hv_current"),
+        indicators.get("hv_long"),
+        hv_weight=FORECAST_HV_WEIGHT,
+        iv_haircut=FORECAST_IV_HAIRCUT,
+        jump_move=earnings_jump if earnings_before_expiry else None,
+        t_years=t_years,
+    )
+    if earnings_before_expiry and earnings_jump is None and implied_vol:
+        forecast_vol = max(forecast_vol or 0.0, implied_vol)
 
-def _real_world_drift(indicators):
-    drift = None
-    if indicators:
-        drift = indicators.get("realized_drift")
-    if drift is None:
-        return 0.0
-    return max(-0.25, min(0.25, drift))
+    drift = REAL_WORLD_DRIFT
+    expected_loss = expected_itm_payoff(
+        price, strike, forecast_vol, t_years, drift, option_type=option_type
+    )
+    pop = probability_of_profit(
+        price, strike, forecast_vol, t_years, drift, net_premium, option_type=option_type
+    )
+    ev = None
+    if net_premium is not None and expected_loss is not None:
+        ev = net_premium - expected_loss
+    return {
+        "forecast_vol": forecast_vol,
+        "drift": drift,
+        "expected_loss": expected_loss,
+        "pop": pop,
+        "ev": ev,
+        "sigma_distance": sigma_distance(
+            price, strike, forecast_vol, t_years, option_type=option_type
+        ),
+        "credit_risk_ratio": credit_risk_ratio(net_premium, expected_loss),
+    }
 
 
 def _warn_if_config_is_overconstrained(cfg, option_type):
@@ -1051,105 +1095,6 @@ def _warn_if_config_is_overconstrained(cfg, option_type):
             f"{cfg['TARGET_MONTHLY_YIELD_PCT']:.2f}%/mo at |delta|<={cfg['MAX_ABS_DELTA']:.2f}; "
             "that is likely very selective unless IV is unusually elevated."
         )
-
-
-def _estimate_delta(
-    price,
-    strike,
-    implied_volatility,
-    expiration_dt,
-    now_dt,
-    risk_free_rate,
-    dividend_yield,
-    option_type="put",
-):
-    if (
-        price is None
-        or strike is None
-        or implied_volatility is None
-        or price <= 0
-        or strike <= 0
-        or implied_volatility <= 0
-    ):
-        return None
-
-    t_years = _years_to_expiration(expiration_dt, now_dt)
-    if t_years is None:
-        return None
-
-    sigma_sqrt_t = implied_volatility * math.sqrt(t_years)
-    if sigma_sqrt_t <= 0:
-        return None
-
-    r = risk_free_rate
-    q = dividend_yield
-    d1 = (
-        math.log(price / strike) + (r - q + 0.5 * (implied_volatility**2)) * t_years
-    ) / sigma_sqrt_t
-
-    if option_type == "call":
-        return math.exp(-q * t_years) * _normal_cdf(d1)
-    return -math.exp(-q * t_years) * _normal_cdf(-d1)
-
-
-def _calculate_pop_ev(
-    price,
-    strike,
-    implied_volatility,
-    expiration_dt,
-    now_dt,
-    risk_free_rate,
-    dividend_yield,
-    premium,
-    option_type="put",
-):
-    if (
-        price is None
-        or strike is None
-        or implied_volatility is None
-        or premium is None
-        or price <= 0
-        or strike <= 0
-        or implied_volatility <= 0
-        or premium <= 0
-    ):
-        return None, None
-
-    t_years = _years_to_expiration(expiration_dt, now_dt)
-    if t_years is None or t_years <= 0:
-        return None, None
-
-    sigma_sqrt_t = implied_volatility * math.sqrt(t_years)
-    if sigma_sqrt_t <= 0:
-        return None, None
-
-    r = risk_free_rate
-    q = dividend_yield
-
-    try:
-        d2 = (
-            math.log(price / strike)
-            + (r - q - 0.5 * (implied_volatility**2)) * t_years
-        ) / sigma_sqrt_t
-        d1 = d2 + sigma_sqrt_t
-
-        n_d1 = _normal_cdf(d1)
-        n_d2 = _normal_cdf(d2)
-        n_neg_d1 = _normal_cdf(-d1)
-        n_neg_d2 = _normal_cdf(-d2)
-
-        if option_type == "call":
-            pop = n_neg_d2 * 100.0
-            expected_loss = price * math.exp((r - q) * t_years) * n_d1 - strike * n_d2
-            ev = premium - expected_loss
-        else:
-            pop = n_d2 * 100.0
-            expected_loss = strike * n_neg_d2 - price * math.exp((r - q) * t_years) * n_neg_d1
-            ev = premium - expected_loss
-
-        return _safe_round(pop, 1), _safe_round(ev, 2)
-    except Exception:
-        return None, None
 
 
 def _extract_contracts(options_payload, option_type="put"):
@@ -1287,7 +1232,7 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
     monthly_yield_pct, annualized_yield_pct = simple_yields(net_premium, collateral, dte)
 
     checks = {
-        "Yield >= 1%/month": monthly_yield_pct is not None
+        f"Yield >= {TARGET_MONTHLY_YIELD_PCT:g}%/month": monthly_yield_pct is not None
         and monthly_yield_pct >= TARGET_MONTHLY_YIELD_PCT,
         f"Premium > {MIN_PREMIUM}": net_premium > MIN_PREMIUM,
         f"{MIN_DTE} <= DTE <= {MAX_DTE}": MIN_DTE <= dte <= MAX_DTE,
@@ -1328,6 +1273,7 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
         if isinstance(next_earnings_dt, datetime)
         else None,
         "EarningsBeforeExpiry": earnings_before_expiry,
+        "EarningsMovePct": None,
         "DTE": dte,
         "Premium": round(premium, 2),
         "NetPremium": _safe_round(net_premium),
@@ -1434,6 +1380,21 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
     if indicators is None:
         indicators = fetch_historical_indicators(symbol)
 
+    # VRP compares the symbol's ATM IV with what the stock has actually realised.
+    realized_vol = (
+        realized_vol_blend(indicators.get("hv_current"), indicators.get("hv_long"))
+        if indicators
+        else None
+    )
+    vrp_ratio = variance_risk_premium(atm_iv, realized_vol)
+
+    earnings_jump = None
+    if any(row.get("EarningsBeforeExpiry") for row, _ in pre_evaluated):
+        try:
+            earnings_jump = fetch_earnings_jump(symbol, indicators, as_of=now_dt)
+        except Exception as e:
+            debug_log(f"Earnings history unavailable for {symbol}: {e}")
+
     # Second pass: enrich with technical indicators + IV/HV percentile filter.
     passed_contracts = []
     near_contracts = []
@@ -1472,45 +1433,32 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
             _parse_expiration(contract_data.get("Expiration")),
             now_dt,
         )
-        forecast_vol = forecast_volatility(
+        earnings_before_expiry = bool(contract_data.get("EarningsBeforeExpiry"))
+        risk = assess_contract_risk(
+            price,
+            strike,
             iv,
-            indicators.get("hv_current") if indicators else None,
-            indicators.get("hv_long") if indicators else None,
-            hv_weight=FORECAST_HV_WEIGHT,
-            iv_haircut=FORECAST_IV_HAIRCUT,
-        )
-        vrp_ratio = variance_risk_premium(iv, forecast_vol)
-        drift = _real_world_drift(indicators)
-        expected_loss = expected_itm_payoff(
-            price,
-            strike,
-            forecast_vol,
             t_years,
-            drift,
-            option_type=option_type,
-        )
-        pop = probability_of_profit(
-            price,
-            strike,
-            forecast_vol,
-            t_years,
-            drift,
             net_premium,
+            indicators,
             option_type=option_type,
+            earnings_before_expiry=earnings_before_expiry,
+            earnings_jump=earnings_jump,
         )
-        sigma_dist = sigma_distance(price, strike, forecast_vol, t_years, option_type=option_type)
-        risk_ratio = credit_risk_ratio(net_premium, expected_loss)
-        ev = None
-        if net_premium is not None and expected_loss is not None:
-            ev = net_premium - expected_loss
+        pop = risk["pop"]
 
-        contract_data["ForecastVol"] = _safe_round(forecast_vol, 3)
+        contract_data["ForecastVol"] = _safe_round(risk["forecast_vol"], 3)
+        contract_data["EarningsMovePct"] = (
+            _safe_round(earnings_jump * 100.0)
+            if earnings_before_expiry and earnings_jump is not None
+            else None
+        )
         contract_data["VRPRatio"] = _safe_round(vrp_ratio, 3)
-        contract_data["SigmaDistance"] = _safe_round(sigma_dist, 3)
-        contract_data["CreditRiskRatio"] = _safe_round(risk_ratio, 3)
+        contract_data["SigmaDistance"] = _safe_round(risk["sigma_distance"], 3)
+        contract_data["CreditRiskRatio"] = _safe_round(risk["credit_risk_ratio"], 3)
         contract_data["PoP"] = _safe_round(pop * 100.0 if pop is not None else None, 1)
-        contract_data["EV"] = _safe_round(ev)
-        contract_data["ExpectedAssignmentLoss"] = _safe_round(expected_loss)
+        contract_data["EV"] = _safe_round(risk["ev"])
+        contract_data["ExpectedAssignmentLoss"] = _safe_round(risk["expected_loss"])
 
         effective_iv_rank = (
             iv_rank if iv_rank is not None else contract_data.get("IVHVPercentile")
@@ -1518,27 +1466,21 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
         if effective_iv_rank is not None and effective_iv_rank < MIN_IV_RANK:
             failed.append(f"IVRank >= {MIN_IV_RANK:.0%}")
 
-        liquidity_score = min(contract_data["OpenInterest"] / 500, 1.0) * SCORE_WEIGHT_OI
-        liquidity_score += min(contract_data["Volume"] / 50, 1.0) * SCORE_WEIGHT_VOLUME
-        yield_score = 0.0
-        if contract_data.get("MonthlyYieldPct") is not None and TARGET_MONTHLY_YIELD_PCT > 0:
-            yield_score = (
-                min(contract_data["MonthlyYieldPct"] / TARGET_MONTHLY_YIELD_PCT, 2.0)
-                * SCORE_WEIGHT_YIELD
-            )
-        otm_score = min(max(contract_data["OTMPct"], 0) / 10, 1.0) * SCORE_WEIGHT_OTM
-        spread_score = 0.0
-        if contract_data.get("SpreadPct") is not None:
-            spread_score = (
-                max(0.0, 1.0 - (contract_data["SpreadPct"] / MAX_SPREAD_PCT))
-                * SCORE_WEIGHT_SPREAD
-            )
-        dte_mid = (MIN_DTE + MAX_DTE) / 2
-        dte_score = max(0.0, 1.0 - abs(dte - dte_mid) / dte_mid) * SCORE_WEIGHT_DTE
-        iv_score = _score_variance_risk_premium(vrp_ratio)
-        contract_data["Score"] = _safe_round(
-            yield_score + otm_score + liquidity_score + spread_score + dte_score + iv_score
+        components = score_components(
+            sigma_dist=risk["sigma_distance"],
+            implied_vol=iv,
+            monthly_yield_pct=contract_data.get("MonthlyYieldPct"),
+            target_yield_pct=TARGET_MONTHLY_YIELD_PCT,
+            dte=dte,
+            min_dte=MIN_DTE,
+            max_dte=MAX_DTE,
+            vrp=vrp_ratio,
+            open_interest=contract_data.get("OpenInterest"),
+            volume=contract_data.get("Volume"),
+            spread_pct=contract_data.get("SpreadPct"),
+            max_spread_pct=MAX_SPREAD_PCT,
         )
+        contract_data["Score"] = _safe_round(composite_score(components, SCORE_WEIGHTS), 1)
         contract_data["Status"] = "PASS" if len(failed) == 0 else "NEAR"
         contract_data["Failed Criterion"] = failed[0] if len(failed) == 1 else ""
 
@@ -1671,7 +1613,8 @@ def main():
         f"|delta|={MIN_ABS_DELTA:.2f}-{MAX_ABS_DELTA:.2f}, "
         f"spread<={MAX_SPREAD_PCT:.2f}% and <=${MAX_SPREAD_ABS:.2f}, "
         f"ivRank>={MIN_IV_RANK:.0%}, "
-        f"filterDowntrends={FILTER_DOWNTRENDS}"
+        f"filterDowntrends={FILTER_DOWNTRENDS}, "
+        f"drift={REAL_WORLD_DRIFT:.1%}"
     )
 
     print(f"Phase 1: Screening {len(tickers)} tickers for price < ${PRICE_LIMIT}...")
@@ -1712,6 +1655,7 @@ def main():
             "Expiration",
             "NextEarnings",
             "EarningsBeforeExpiry",
+            "EarningsMovePct",
             "DTE",
             "Premium",
             "NetPremium",

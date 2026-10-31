@@ -1126,10 +1126,10 @@
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Put option strike price evaluated for the wheel.">Strike</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Option expiration date.">Exp</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help" title="Next known earnings date for the underlying.">Next Earn</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-center" title="Whether earnings occurs on/before option expiration.">Earn<=Exp</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-center" title="Whether earnings occurs on/before option expiration. When known, the typical earnings move (last four reports, net of normal daily noise) is shown; it is added to the forecast volatility behind PoP and EV.">Earn<=Exp</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Days to expiration.">DTE</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Estimated premium collected per share.">Premium</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right text-emerald-600" title="Expected Value (per-share) of the written option under BSM model. Positive represents statistical edge.">EV ($)</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right text-emerald-600" title="Expected Value (per share) of the written option: net premium minus the expected assignment loss under the forecast volatility and the configured real-world drift. Positive represents statistical edge.">EV ($)</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Estimated monthly yield percentage from premium.">Mo Yield%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="RISK" title="Out-of-the-money percentage from current price to strike.">OTM%</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Option delta, indicating probability-like sensitivity to price moves.">Delta</th>
@@ -1140,10 +1140,10 @@
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="TECHNICALS" title="RSI(14): Relative Strength Index. Below 30 = oversold, above 70 = overbought.">RSI</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="ADX(14): Average Directional Index. Above 25 = strong trend.">ADX</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Price distance from EMA50 in percent. Negative = below EMA50.">Diff%</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="COMPOSITE" title="Composite ranking score: yield + OTM distance + liquidity (OI/volume) + spread quality + DTE fit + variance risk premium. Higher is better.">Score</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="COMPOSITE" title="Composite ranking score, 0-100. Weighted (see the config YAML) blend of: safety (strike distance in forecast standard deviations, full at 2 sigma), volatility (penalises very high IV), yield (capped at the monthly target), DTE fit, variance risk premium, open interest, volume and spread quality. Higher is better.">Score</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" data-group="NET/RISK" title="Premium net of commission and assumed slippage from mid. Yields are computed from this, not from the mid price.">Net Prem</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="True IV Rank (0-1): where today's ATM implied volatility sits inside its own recorded 1-year range. Empty until enough scan history has accumulated, in which case IVHVPct is used instead.">IVRank</th>
-                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Variance risk premium: implied volatility divided by forecast (realized-based) volatility. Above ~1.2 means the option is priced well above what the stock has actually been moving.">VRP</th>
+                        <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Variance risk premium: the symbol's ATM implied volatility divided by its realized volatility. Above ~1.2 means options are priced well above what the stock has actually been moving.">VRP</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Distance from spot to strike in standard deviations of the forecast volatility. Comparable across tickers, unlike OTM%.">SigmaDist</th>
                         <th class="px-4 py-3 font-semibold text-gray-700 cursor-help text-right" title="Net credit divided by the expected assignment loss under the forecast volatility. Higher = more credit per unit of tail risk.">Cr/Risk</th>
                     </tr>
@@ -1945,7 +1945,7 @@
                         const earningsBadgeText = r.EarningsBeforeExpiry == null
                             ? 'N/A'
                             : earningsBeforeExpiry
-                                ? 'Yes'
+                                ? (r.EarningsMovePct != null ? `Yes ±${Number(r.EarningsMovePct).toFixed(1)}%` : 'Yes')
                                 : 'No';
 
                         const evVal = r.EV;

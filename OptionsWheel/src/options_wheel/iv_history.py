@@ -10,72 +10,131 @@ premium selling.
 Yahoo does not expose historical implied volatility, so we build it ourselves:
 every scan records the ATM implied volatility of each analysed symbol, and once
 enough observations have accumulated a real IV Rank / IV Percentile can be
-computed. The store is a single JSON file so it can be cached between CI runs.
+computed. The store is a directory with one ``YYYY-MM-DD.json`` file per scan
+date mapping ``symbol -> atm_iv``. Past days are never rewritten, so the
+git-tracked copy CI keeps on the ``ow-data`` branch (see
+:mod:`options_wheel.datasync`) only grows by one small file per scan.
 """
 
 from __future__ import annotations
 
+import glob
 import json
 import os
+import re
 import threading
 
 DEFAULT_LOOKBACK_DAYS = 252
 DEFAULT_MIN_OBSERVATIONS = 40
+# Number of most recent scan dates kept on disk (~1.6 years of weekday scans).
 DEFAULT_MAX_OBSERVATIONS = 400
+
+# Store directory name inside ``data/history``.
+IV_HISTORY_DIRNAME = "iv"
+# Pre-split single-file format: ``{symbol: {date: atm_iv}}``.
+LEGACY_FILENAME = "iv_history.json"
+
+_DATE_FILE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _date_files(directory):
+    """Return ``{date: path}`` for the per-date files in ``directory``."""
+    files = {}
+    for path in glob.glob(os.path.join(directory, "*.json")):
+        date_str = os.path.splitext(os.path.basename(path))[0]
+        if _DATE_FILE_RE.match(date_str):
+            files[date_str] = path
+    return files
 
 
 class IVHistoryStore:
-    """Thread-safe ``{symbol: {date: atm_iv}}`` store backed by a JSON file."""
+    """Thread-safe ``{symbol: {date: atm_iv}}`` store backed by per-date files."""
 
     def __init__(
         self,
-        path,
+        directory,
         lookback=DEFAULT_LOOKBACK_DAYS,
         min_observations=DEFAULT_MIN_OBSERVATIONS,
         max_observations=DEFAULT_MAX_OBSERVATIONS,
     ):
-        self.path = path
+        self.directory = directory
         self.lookback = lookback
         self.min_observations = min_observations
         self.max_observations = max_observations
         self._lock = threading.Lock()
         self._data = {}
-        self._dirty = False
+        self._dirty_dates = set()
 
     def load(self):
-        try:
-            with open(self.path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            if isinstance(data, dict):
-                self._data = {
-                    symbol: {str(k): float(v) for k, v in series.items()}
-                    for symbol, series in data.items()
-                    if isinstance(series, dict)
-                }
-        except (OSError, ValueError):
-            self._data = {}
+        data = {}
+        for date_str, path in sorted(_date_files(self.directory).items()):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    day = json.load(f)
+            except (OSError, ValueError):
+                continue
+            if not isinstance(day, dict):
+                continue
+            for symbol, iv in day.items():
+                try:
+                    data.setdefault(symbol, {})[date_str] = float(iv)
+                except (TypeError, ValueError):
+                    continue
+        with self._lock:
+            self._data = data
+            self._dirty_dates = set()
         return self
 
+    @classmethod
+    def from_legacy_file(cls, path):
+        """Read-only store holding the observations of a pre-split JSON file."""
+        store = cls(None)
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            return store
+        if isinstance(data, dict):
+            store._data = {
+                symbol: {str(k): float(v) for k, v in series.items()}
+                for symbol, series in data.items()
+                if isinstance(series, dict)
+            }
+        return store
+
     def save(self):
-        if not self._dirty:
-            return False
+        """Write the files of dates changed since loading, then prune old dates."""
         with self._lock:
-            trimmed = {}
+            if not self._dirty_dates:
+                return False
+            days = {date_str: {} for date_str in self._dirty_dates}
             for symbol, series in self._data.items():
-                if not series:
-                    continue
-                recent = sorted(series.items())[-self.max_observations :]
-                trimmed[symbol] = {date: round(iv, 4) for date, iv in recent}
-            payload = trimmed
-        directory = os.path.dirname(self.path)
-        if directory:
-            os.makedirs(directory, exist_ok=True)
-        tmp_path = f"{self.path}.tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(payload, f, separators=(",", ":"), sort_keys=True)
-        os.replace(tmp_path, self.path)
-        self._dirty = False
+                for date_str, iv in series.items():
+                    if date_str in days:
+                        days[date_str][symbol] = round(iv, 4)
+            self._dirty_dates = set()
+
+        os.makedirs(self.directory, exist_ok=True)
+        for date_str, payload in days.items():
+            path = os.path.join(self.directory, f"{date_str}.json")
+            tmp_path = f"{path}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(payload, f, separators=(",", ":"), sort_keys=True)
+            os.replace(tmp_path, path)
+        self._prune()
         return True
+
+    def _prune(self):
+        files = _date_files(self.directory)
+        expired = sorted(files)[: -self.max_observations] if self.max_observations else []
+        for date_str in expired:
+            os.remove(files[date_str])
+        if expired:
+            expired = set(expired)
+            with self._lock:
+                for series in self._data.values():
+                    for date_str in expired & series.keys():
+                        del series[date_str]
 
     def record(self, symbol, date_str, atm_iv):
         """Record today's ATM implied volatility for ``symbol``."""
@@ -83,7 +142,24 @@ class IVHistoryStore:
             return
         with self._lock:
             self._data.setdefault(symbol, {})[date_str] = float(atm_iv)
-            self._dirty = True
+            self._dirty_dates.add(date_str)
+
+    def merge(self, other):
+        """Add observations from another store; dates already present are kept.
+
+        Lets scans from several machines (local runs, CI) build one history.
+        Returns the number of observations added.
+        """
+        added = 0
+        with self._lock:
+            for symbol, series in other._data.items():
+                target = self._data.setdefault(symbol, {})
+                for date_str, iv in series.items():
+                    if date_str not in target:
+                        target[date_str] = iv
+                        self._dirty_dates.add(date_str)
+                        added += 1
+        return added
 
     def observations(self, symbol):
         with self._lock:

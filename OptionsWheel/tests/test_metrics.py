@@ -4,13 +4,17 @@ from datetime import datetime, timezone
 import pytest
 
 from options_wheel.metrics import (
+    black_scholes_price,
+    composite_score,
     credit_risk_ratio,
     expected_itm_payoff,
     forecast_volatility,
+    jump_adjusted_vol,
     net_credit,
     option_delta,
     probability_of_profit,
     probability_otm,
+    score_components,
     sigma_distance,
     simple_yields,
     variance_risk_premium,
@@ -90,3 +94,59 @@ def test_forecast_vol_vrp_and_sigma_distance():
     call_sigma = sigma_distance(100.0, 110.0, 0.25, t_years, option_type="call")
     assert put_sigma is not None and put_sigma > 0
     assert call_sigma is not None and call_sigma > 0
+
+
+def test_earnings_jump_adds_variance_to_realised_leg_only():
+    t_years = 30.0 / 365.0
+    jump = 0.08
+    assert jump_adjusted_vol(0.20, jump, t_years) == pytest.approx(math.sqrt(0.04 + jump**2 / t_years))
+    assert jump_adjusted_vol(0.20, None, t_years) == 0.20
+
+    base = forecast_volatility(0.40, 0.22, 0.18, hv_weight=0.5, iv_haircut=0.85)
+    with_jump = forecast_volatility(
+        0.40, 0.22, 0.18, hv_weight=0.5, iv_haircut=0.85, jump_move=jump, t_years=t_years
+    )
+    expected_hv = jump_adjusted_vol(0.20, jump, t_years)
+    assert with_jump == pytest.approx(0.5 * expected_hv + 0.5 * 0.34)
+    assert with_jump > base
+
+
+def test_black_scholes_price_matches_parity_and_intrinsic_at_expiry():
+    t_years = 60.0 / 365.0
+    rate = 0.04
+    put = black_scholes_price(100.0, 95.0, 0.30, t_years, rate, option_type="put")
+    call = black_scholes_price(100.0, 95.0, 0.30, t_years, rate, option_type="call")
+    assert call - put == pytest.approx(100.0 - 95.0 * math.exp(-rate * t_years), abs=1e-9)
+
+    assert black_scholes_price(90.0, 95.0, 0.30, 0.0, option_type="put") == pytest.approx(5.0)
+    assert black_scholes_price(90.0, 95.0, 0.30, 0.0, option_type="call") == 0.0
+
+
+def test_score_components_are_bounded_and_yield_is_capped():
+    components = score_components(
+        sigma_dist=3.0,
+        implied_vol=1.5,
+        monthly_yield_pct=5.0,
+        target_yield_pct=1.2,
+        dte=30,
+        min_dte=20,
+        max_dte=40,
+        vrp=0.8,
+        open_interest=10_000,
+        volume=None,
+        spread_pct=5.0,
+        max_spread_pct=20.0,
+    )
+    assert all(0.0 <= value <= 1.0 for value in components.values())
+    assert components["safety"] == 1.0
+    assert components["vol"] == 0.0
+    assert components["yield"] == 1.0
+    assert components["dte"] == 1.0
+    assert components["vrp"] == 0.0
+    assert components["oi"] == 1.0
+    assert components["volume"] == 0.0
+    assert components["spread"] == pytest.approx(0.75)
+
+    weights = {"safety": 30, "yield": 10, "spread": 10}
+    assert composite_score(components, weights) == pytest.approx(100.0 * (30 + 10 + 7.5) / 50)
+    assert composite_score(components, {}) == 0.0

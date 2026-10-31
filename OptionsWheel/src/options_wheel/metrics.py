@@ -137,16 +137,45 @@ def probability_of_profit(spot, strike, sigma, t_years, drift, net_premium, opti
     return normal_cdf(d2) if d2 is not None else None
 
 
-def forecast_volatility(implied_vol, hv_short, hv_long, hv_weight=0.5, iv_haircut=0.85):
+def realized_vol_blend(hv_short, hv_long):
+    """Average of the short and long realised volatilities that are available."""
+    parts = [v for v in (hv_short, hv_long) if v is not None and v > 0]
+    return sum(parts) / len(parts) if parts else None
+
+
+def jump_adjusted_vol(sigma, jump_move, t_years):
+    """Add a one-off jump (e.g. an earnings gap) to a diffusive volatility.
+
+    Total variance over the life of the contract is ``sigma^2 * T + jump^2``,
+    so the equivalent annualised volatility is ``sqrt(sigma^2 + jump^2 / T)``.
+    """
+    if sigma is None or not jump_move or not t_years or t_years <= 0:
+        return sigma
+    return math.sqrt(sigma**2 + jump_move**2 / t_years)
+
+
+def forecast_volatility(
+    implied_vol,
+    hv_short,
+    hv_long,
+    hv_weight=0.5,
+    iv_haircut=0.85,
+    jump_move=None,
+    t_years=None,
+):
     """Blend realised volatility with a haircut implied volatility.
 
     Realised volatility is the best available proxy for what will actually be
     realised over the life of the contract; the haircut implied volatility keeps
     the estimate anchored when the history is missing or the regime just
     changed. Returns ``None`` when nothing usable is available.
+
+    ``jump_move`` (a typical log move, e.g. the historical earnings gap) is
+    added to the *realised* leg only: trailing realised volatility does not
+    contain the upcoming scheduled event, whereas the option's implied
+    volatility already prices it.
     """
-    hv_parts = [v for v in (hv_short, hv_long) if v is not None and v > 0]
-    hv_blend = sum(hv_parts) / len(hv_parts) if hv_parts else None
+    hv_blend = jump_adjusted_vol(realized_vol_blend(hv_short, hv_long), jump_move, t_years)
 
     iv_part = implied_vol * iv_haircut if implied_vol and implied_vol > 0 else None
 
@@ -159,12 +188,28 @@ def forecast_volatility(implied_vol, hv_short, hv_long, hv_weight=0.5, iv_haircu
     return weight * hv_blend + (1.0 - weight) * iv_part
 
 
-def variance_risk_premium(implied_vol, forecast_vol):
-    """``IV / forecast vol``. Above 1 means the option is priced above what the
-    underlying has actually been moving - the seller's edge."""
-    if not implied_vol or not forecast_vol or forecast_vol <= 0:
+def variance_risk_premium(implied_vol, realized_vol):
+    """``IV / realised vol``. Above 1 means options are priced above what the
+    underlying has actually been moving - the seller's edge.
+
+    Pass the at-the-money IV and the *realised* volatility: comparing against
+    a forecast that itself contains IV would bias the ratio towards 1.
+    """
+    if not implied_vol or not realized_vol or realized_vol <= 0:
         return None
-    return implied_vol / forecast_vol
+    return implied_vol / realized_vol
+
+
+def black_scholes_price(spot, strike, sigma, t_years, risk_free_rate=0.0, dividend_yield=0.0, option_type="put"):
+    """Black-Scholes price per share; intrinsic value once ``t_years <= 0``."""
+    if spot is None or strike is None or spot <= 0 or strike <= 0:
+        return None
+    if t_years is None or t_years <= 0 or not sigma or sigma <= 0:
+        return max(spot - strike, 0.0) if option_type == "call" else max(strike - spot, 0.0)
+    payoff = expected_itm_payoff(
+        spot, strike, sigma, t_years, risk_free_rate - dividend_yield, option_type=option_type
+    )
+    return math.exp(-risk_free_rate * t_years) * payoff
 
 
 def net_credit(
@@ -248,6 +293,83 @@ def credit_risk_ratio(net_premium, expected_loss):
     if expected_loss <= 1e-9:
         return None
     return net_premium / expected_loss
+
+
+# Anchors that map each raw metric onto [0, 1] for the composite score.
+SCORE_FULL_SIGMA_DISTANCE = 2.0
+SCORE_IV_FULL_MARKS = 0.40
+SCORE_IV_ZERO_MARKS = 1.00
+SCORE_FULL_VRP_EXCESS = 0.30
+SCORE_FULL_OPEN_INTEREST = 500.0
+SCORE_FULL_VOLUME = 50.0
+
+
+def _unit(value):
+    return max(0.0, min(1.0, value))
+
+
+def score_components(
+    sigma_dist=None,
+    implied_vol=None,
+    monthly_yield_pct=None,
+    target_yield_pct=None,
+    dte=None,
+    min_dte=None,
+    max_dte=None,
+    vrp=None,
+    open_interest=None,
+    volume=None,
+    spread_pct=None,
+    max_spread_pct=None,
+):
+    """Map raw contract metrics onto ``[0, 1]`` sub-scores (missing -> 0).
+
+    * ``safety``  - strike distance in forecast standard deviations (2 sigma = full).
+    * ``vol``     - prefers calmer underlyings: full marks at IV <= 40%, zero at >= 100%.
+      Back-tests showed the highest-IV names produced the largest losses.
+    * ``yield``   - credit relative to the target, capped at the target so the
+      score never rewards reaching for premium.
+    * ``dte``     - closeness to the middle of the configured DTE window.
+    * ``vrp``     - ATM implied over realised volatility (1.3x = full marks).
+    * ``oi`` / ``volume`` / ``spread`` - execution quality.
+    """
+    components = {}
+    components["safety"] = (
+        _unit(sigma_dist / SCORE_FULL_SIGMA_DISTANCE) if sigma_dist is not None else 0.0
+    )
+    components["vol"] = (
+        _unit((SCORE_IV_ZERO_MARKS - implied_vol) / (SCORE_IV_ZERO_MARKS - SCORE_IV_FULL_MARKS))
+        if implied_vol
+        else 0.0
+    )
+    components["yield"] = (
+        _unit(monthly_yield_pct / target_yield_pct)
+        if monthly_yield_pct is not None and target_yield_pct
+        else 0.0
+    )
+    if dte is not None and min_dte is not None and max_dte is not None:
+        mid = (min_dte + max_dte) / 2.0
+        components["dte"] = _unit(1.0 - abs(dte - mid) / mid) if mid > 0 else 0.0
+    else:
+        components["dte"] = 0.0
+    components["vrp"] = _unit((vrp - 1.0) / SCORE_FULL_VRP_EXCESS) if vrp is not None else 0.0
+    components["oi"] = _unit((open_interest or 0) / SCORE_FULL_OPEN_INTEREST)
+    components["volume"] = _unit((volume or 0) / SCORE_FULL_VOLUME)
+    components["spread"] = (
+        _unit(1.0 - spread_pct / max_spread_pct)
+        if spread_pct is not None and max_spread_pct
+        else 0.0
+    )
+    return components
+
+
+def composite_score(components, weights):
+    """Weighted mean of ``[0, 1]`` components scaled to ``0..100``."""
+    total = sum(max(w, 0.0) for w in weights.values())
+    if total <= 0:
+        return 0.0
+    value = sum(max(w, 0.0) * components.get(name, 0.0) for name, w in weights.items())
+    return 100.0 * value / total
 
 
 def max_monthly_yield_for_delta(abs_delta, dte, implied_vol, risk_free_rate=0.045):

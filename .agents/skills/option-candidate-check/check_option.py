@@ -12,8 +12,11 @@ Usage:
   python check_option.py --ticker AAPL --news
 
 Environment:
-  OW_API_BASE        base URL of the OptionsWheel API (default http://localhost:7071/api)
+  OW_API_BASE        base URL of the OptionsWheel API (default: the screener's DEFAULT_API_BASE)
   OW_SEC_USER_AGENT  User-Agent for SEC EDGAR requests (default StockQuotesStrategy research@stockquotes.example.com)
+
+Thresholds, costs, the volatility forecast and the drift come from the same
+YAML config as the screener (OptionsWheel/config/screening_config_<type>.yaml).
 """
 
 from __future__ import annotations
@@ -99,7 +102,12 @@ def find_options_wheel_src(start=SCRIPT_DIR):
 
 
 def api_base():
-    return os.environ.get("OW_API_BASE", "http://localhost:7071/api").rstrip("/")
+    base = os.environ.get("OW_API_BASE")
+    if not base:
+        from options_wheel.analysis import DEFAULT_API_BASE
+
+        base = DEFAULT_API_BASE
+    return base.rstrip("/")
 
 
 def http_get_json(url, timeout=30, retries=3, headers=None):
@@ -760,62 +768,38 @@ def backtest_realized(quotes, strike, option_type, dte, net_premium=None, min_sa
     return out
 
 
-def fetch_earnings_gap(symbol, quotes):
-    """Realized close-to-close move around recent earnings, from the API summary.
+def fetch_earnings_gap(symbol, closes, realized_vol=None):
+    """Realised moves around the last four earnings reports.
 
-    Uses the quoteSummary ``earnings`` module for past report dates, then
-    measures the next-trading-day close vs the pre-report close on the daily
-    bars. Returns None if there are too few reports or no price data.
+    Report dates come from the API summary ``earnings`` module; each move runs
+    from the last close before the report to the first close after it, so it
+    captures the reaction for both pre-market and after-close reports. Returns
+    ``(stats, jump)`` where ``jump`` is the typical log move net of normal
+    diffusion (the same estimate the screener adds to its forecast), or
+    ``(None, None)`` with fewer than two usable reports.
     """
+    from options_wheel.earnings import (
+        earnings_moves,
+        jump_size,
+        move_stats,
+        report_dates_from_summary,
+    )
+
     url = f"{api_base()}/yahoo-finance-summary?ticker={symbol}&modules=earnings"
     data = http_get_json(url, timeout=45)
-    chart = ((data.get("earnings") or {}).get("earningsChart") or {})
-    quarterly = chart.get("quarterly") or []
-    if not quarterly:
-        return None
-    report_dates = []
-    for item in quarterly:
-        dt = _parse_iso_dt(item.get("reportedDate"))
-        if dt is not None:
-            report_dates.append(dt.date())
+    moves = earnings_moves(
+        report_dates_from_summary(data), closes or [], before=datetime.now(timezone.utc)
+    )
+    jump = jump_size(moves, realized_vol)
+    if jump is None:
+        return None, None
 
-    bars = []
-    for q in quotes:
-        d = _parse_bar_date(q.get("date"))
-        c = _to_float(q.get("close"))
-        if d is not None and c is not None:
-            bars.append((d, c))
-    bars.sort(key=lambda x: x[0])
-    if len(bars) < 10 or not report_dates:
-        return None
-
-    gaps = []
-    for rd in report_dates:
-        pre_idx = None
-        for i, (d, _) in enumerate(bars):
-            if d <= rd:
-                pre_idx = i
-            else:
-                break
-        if pre_idx is None or pre_idx + 1 >= len(bars):
-            continue
-        pre = bars[pre_idx][1]
-        post = bars[pre_idx + 1][1]
-        if pre and pre > 0:
-            gaps.append((post - pre) / pre * 100)
-
-    if len(gaps) < 2:
-        return None
-    abs_gaps = [abs(g) for g in gaps]
-    surprises = [(_to_float(item.get("surprisePct")) or 0.0) for item in quarterly]
-    surprises = [s for s in surprises if s]
-    return {
-        "count": len(gaps),
-        "avg_abs_move_pct": _safe_round(sum(abs_gaps) / len(abs_gaps), 2),
-        "max_abs_move_pct": _safe_round(max(abs_gaps), 2),
-        "avg_signed_move_pct": _safe_round(sum(gaps) / len(gaps), 2),
-        "avg_surprise_pct": _safe_round(sum(surprises) / len(surprises), 2) if surprises else None,
-    }
+    stats = move_stats(moves)
+    quarterly = (((data.get("earnings") or {}).get("earningsChart") or {}).get("quarterly")) or []
+    surprises = [s for s in ((_to_float(item.get("surprisePct")) or 0.0) for item in quarterly) if s]
+    stats["avg_surprise_pct"] = _safe_round(sum(surprises) / len(surprises), 2) if surprises else None
+    stats["jump_pct"] = _safe_round(jump * 100.0, 2)
+    return stats, jump
 
 
 def list_expirations_and_strikes(symbol, option_type):
@@ -854,27 +838,30 @@ def list_expirations_and_strikes(symbol, option_type):
 
 
 def analyze_contract(symbol, option_type, expiration_date, strike):
+    import options_wheel.analysis as ow
     from options_wheel.analysis import (
         IV_HISTORY_STORE,
         _dte_from_expiration,
         _extract_next_earnings_dt,
+        assess_contract_risk,
         compute_iv_hv_percentile,
         extract_atm_iv,
         fetch_historical_indicators,
     )
     from options_wheel.metrics import (
         collateral_per_share,
-        credit_risk_ratio,
-        expected_itm_payoff,
-        forecast_volatility,
+        composite_score,
         net_credit,
         option_delta,
-        probability_of_profit,
-        sigma_distance,
+        realized_vol_blend,
+        score_components,
         simple_yields,
         variance_risk_premium,
         years_to_expiration,
     )
+
+    # Same thresholds, costs, forecast blend and drift as the screener.
+    ow.init_screening_config(option_type)
 
     now_dt = datetime.now(timezone.utc)
     expiration_dt = _parse_iso_dt(expiration_date)
@@ -922,13 +909,17 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
         spread_pct = None
     else:
         premium, net_premium, spread_pct = net_credit(
-            bid, ask, commission_per_contract=0.65, slippage_pct_of_spread=30.0, round_trip=False
+            bid,
+            ask,
+            commission_per_contract=ow.COMMISSION_PER_CONTRACT,
+            slippage_pct_of_spread=ow.SLIPPAGE_PCT_OF_SPREAD,
+            round_trip=False,
         )
         spread_abs = ask - bid
 
     dividend_yield = _to_float(quote.get("trailingAnnualDividendYield")) or 0.0
     trailing_div_rate = _to_float(quote.get("trailingAnnualDividendRate")) or 0.0
-    risk_free = 0.045
+    risk_free = ow.RISK_FREE_RATE
 
     dte = _dte_from_expiration(expiration_dt, now_dt)
     t_years = years_to_expiration(expiration_dt, now_dt)
@@ -939,25 +930,14 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
     hv_long = indicators.get("hv_long") if indicators else None
     hv_high = indicators.get("hv_high") if indicators else None
     hv_low = indicators.get("hv_low") if indicators else None
+    realized_vol = realized_vol_blend(hv_current, hv_long)
+    # Trailing momentum is reported for context only; the model uses a constant drift.
     drift_raw = indicators.get("realized_drift") if indicators else None
-    drift = max(-0.25, min(0.25, drift_raw)) if drift_raw is not None else 0.0
 
     if api_delta is None:
         delta = option_delta(spot, strike, implied_vol, t_years, risk_free, dividend_yield, option_type=option_type)
     else:
         delta = api_delta
-
-    forecast_vol = forecast_volatility(implied_vol, hv_current, hv_long, hv_weight=0.5, iv_haircut=0.85)
-    vrp_ratio = variance_risk_premium(implied_vol, forecast_vol)
-    expected_loss = expected_itm_payoff(spot, strike, forecast_vol, t_years, drift, option_type=option_type)
-    pop = probability_of_profit(spot, strike, forecast_vol, t_years, drift, net_premium, option_type=option_type)
-    sigma_dist = sigma_distance(spot, strike, forecast_vol, t_years, option_type=option_type)
-    risk_ratio = credit_risk_ratio(net_premium, expected_loss)
-    ev = None
-    if net_premium is not None and expected_loss is not None:
-        ev = net_premium - expected_loss
-    collateral = collateral_per_share(strike, spot, net_premium, option_type=option_type)
-    monthly_yield, annualized_yield = simple_yields(net_premium, collateral, dte)
 
     if option_type == "call":
         otm_pct = ((strike - spot) / spot) * 100
@@ -1009,7 +989,7 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
         iv_percentile = iv_hv_percentile
         iv_rank_fallback = True
 
-    # Realized backtest + earnings gap (best-effort; never fail the report).
+    # Realized backtest + earnings moves (best-effort; never fail the report).
     bars = None
     try:
         bars = fetch_history(symbol)
@@ -1021,12 +1001,46 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
             backtest = backtest_realized(bars, strike, option_type, dte, net_premium=net_premium)
         except Exception:
             backtest = None
-    earnings_gap = None
-    if bars:
+    earnings_gap = earnings_jump = None
+    if indicators and indicators.get("closes"):
         try:
-            earnings_gap = fetch_earnings_gap(symbol, bars)
+            earnings_gap, earnings_jump = fetch_earnings_gap(
+                symbol, indicators["closes"], realized_vol
+            )
         except Exception:
-            earnings_gap = None
+            earnings_gap = earnings_jump = None
+
+    # Risk model: identical to the screener, including the earnings jump.
+    risk = assess_contract_risk(
+        spot,
+        strike,
+        implied_vol,
+        t_years,
+        net_premium,
+        indicators,
+        option_type=option_type,
+        earnings_before_expiry=earnings_before_expiry,
+        earnings_jump=earnings_jump,
+    )
+    pop = risk["pop"]
+    vrp_ratio = variance_risk_premium(atm_iv, realized_vol)
+    collateral = collateral_per_share(strike, spot, net_premium, option_type=option_type)
+    monthly_yield, annualized_yield = simple_yields(net_premium, collateral, dte)
+    components = score_components(
+        sigma_dist=risk["sigma_distance"],
+        implied_vol=implied_vol,
+        monthly_yield_pct=monthly_yield,
+        target_yield_pct=ow.TARGET_MONTHLY_YIELD_PCT,
+        dte=dte,
+        min_dte=ow.MIN_DTE,
+        max_dte=ow.MAX_DTE,
+        vrp=vrp_ratio,
+        open_interest=open_interest,
+        volume=volume,
+        spread_pct=spread_pct,
+        max_spread_pct=ow.MAX_SPREAD_PCT,
+    )
+    score = composite_score(components, ow.SCORE_WEIGHTS)
 
     # Macro events (FOMC, CPI, jobs report, PPI) inside the contract window.
     macro_events = None
@@ -1075,6 +1089,7 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
             "ex_div_risk": ex_div_risk,
             "dividend_yield": _safe_round(dividend_yield, 4),
             "earnings_gap": earnings_gap,
+            "earnings_jump_in_forecast": bool(earnings_before_expiry and earnings_jump is not None),
             "macro_events": macro_events,
         },
         "technicals": {
@@ -1086,7 +1101,8 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
             "hv_long": _safe_round(hv_long, 4),
             "hv_high": _safe_round(hv_high, 4),
             "hv_low": _safe_round(hv_low, 4),
-            "forecast_vol": _safe_round(forecast_vol, 4),
+            "realized_vol": _safe_round(realized_vol, 4),
+            "forecast_vol": _safe_round(risk["forecast_vol"], 4),
             "vrp_ratio": _safe_round(vrp_ratio, 3),
             "atm_iv": _safe_round(atm_iv, 4),
             "iv_rank": _safe_round(iv_rank, 3),
@@ -1094,6 +1110,7 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
             "iv_rank_fallback": iv_rank_fallback,
             "iv_hv_percentile": _safe_round(iv_hv_percentile, 3),
             "realized_drift": _safe_round(drift_raw, 4),
+            "model_drift": _safe_round(risk["drift"], 4),
         },
         "backtest": backtest,
         "returns_risk": {
@@ -1101,10 +1118,12 @@ def analyze_contract(symbol, option_type, expiration_date, strike):
             "monthly_yield_pct": _safe_round(monthly_yield),
             "annualized_yield_pct": _safe_round(annualized_yield),
             "probability_of_profit_pct": _safe_round(pop * 100 if pop is not None else None, 1),
-            "expected_loss_per_share": _safe_round(expected_loss),
-            "ev_per_share": _safe_round(ev),
-            "sigma_distance": _safe_round(sigma_dist, 3),
-            "credit_risk_ratio": _safe_round(risk_ratio, 3),
+            "expected_loss_per_share": _safe_round(risk["expected_loss"]),
+            "ev_per_share": _safe_round(risk["ev"]),
+            "sigma_distance": _safe_round(risk["sigma_distance"], 3),
+            "credit_risk_ratio": _safe_round(risk["credit_risk_ratio"], 3),
+            "score": _safe_round(score, 1),
+            "score_components": {k: _safe_round(v, 3) for k, v in components.items()},
         },
     }
     return report

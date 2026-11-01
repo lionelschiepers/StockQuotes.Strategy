@@ -30,11 +30,14 @@ def test_option_delta_and_probability_sanity():
     put_delta = option_delta(100.0, 95.0, 0.25, t_years, 0.045, 0.0, option_type="put")
     call_delta = option_delta(100.0, 105.0, 0.25, t_years, 0.045, 0.0, option_type="call")
 
-    assert put_delta is not None and -1.0 < put_delta < 0.0
-    assert call_delta is not None and 0.0 < call_delta < 1.0
+    assert put_delta is not None
+    assert -1.0 < put_delta < 0.0
+    assert call_delta is not None
+    assert 0.0 < call_delta < 1.0
 
     prob_otm = probability_otm(100.0, 95.0, 0.20, t_years, 0.0, option_type="put")
-    assert prob_otm is not None and 0.0 < prob_otm < 1.0
+    assert prob_otm is not None
+    assert 0.0 < prob_otm < 1.0
 
 
 def test_expected_itm_payoff_matches_discounted_black_scholes_call_value():
@@ -58,7 +61,8 @@ def test_probability_of_profit_improves_with_more_credit():
     low_credit = probability_of_profit(100.0, 95.0, 0.20, t_years, 0.0, 0.75, option_type="put")
     high_credit = probability_of_profit(100.0, 95.0, 0.20, t_years, 0.0, 1.50, option_type="put")
 
-    assert low_credit is not None and high_credit is not None
+    assert low_credit is not None
+    assert high_credit is not None
     assert high_credit > low_credit
 
 
@@ -87,13 +91,16 @@ def test_forecast_vol_vrp_and_sigma_distance():
     assert forecast == pytest.approx((0.20 + 0.34) / 2.0)
 
     vrp = variance_risk_premium(0.40, forecast)
-    assert vrp is not None and vrp > 1.0
+    assert vrp is not None
+    assert vrp > 1.0
 
     t_years = 45.0 / 365.0
     put_sigma = sigma_distance(100.0, 90.0, 0.25, t_years, option_type="put")
     call_sigma = sigma_distance(100.0, 110.0, 0.25, t_years, option_type="call")
-    assert put_sigma is not None and put_sigma > 0
-    assert call_sigma is not None and call_sigma > 0
+    assert put_sigma is not None
+    assert put_sigma > 0
+    assert call_sigma is not None
+    assert call_sigma > 0
 
 
 def test_earnings_jump_adds_variance_to_realised_leg_only():

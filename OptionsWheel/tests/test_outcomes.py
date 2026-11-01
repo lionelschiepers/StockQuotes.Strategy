@@ -116,3 +116,12 @@ def test_evaluate_grades_expired_archive_and_skips_known_trades(tmp_path):
     again = outcomes.evaluate("put", str(archive_dir), str(output_dir), fetch_history=fake_history)
     assert calls == []
     assert len(again["trades"]) == 2
+
+
+@pytest.mark.parametrize("option_type", ["../put", "PUT", ""])
+def test_unknown_option_type_never_reaches_the_filesystem(tmp_path, option_type):
+    with pytest.raises(ValueError):
+        outcomes.archive_scan([], option_type, archive_dir=str(tmp_path))
+    with pytest.raises(ValueError):
+        outcomes.evaluate(option_type, str(tmp_path), str(tmp_path), fetch_history=None)
+    assert list(tmp_path.iterdir()) == []

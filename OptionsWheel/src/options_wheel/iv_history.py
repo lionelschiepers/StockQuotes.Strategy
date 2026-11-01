@@ -193,6 +193,35 @@ class IVHistoryStore:
         return iv_rank, iv_percentile, count
 
 
+def _usable_contract(expiration_dt, option, now_dt, dte_fn):
+    """``(expiration_dt, dte, strike, iv)`` for a priced contract, else ``None``."""
+    iv = option.get("impliedVolatility")
+    strike = option.get("strike")
+    if expiration_dt is None or not iv or not strike:
+        return None
+    try:
+        iv = float(iv)
+        strike = float(strike)
+    except (TypeError, ValueError):
+        return None
+    if iv <= 0 or strike <= 0:
+        return None
+    dte = dte_fn(expiration_dt, now_dt) if dte_fn else None
+    return expiration_dt, dte, strike, iv
+
+
+def _closest_expiry_contracts(usable, target_dte):
+    """Contracts of the expiry closest to ``target_dte`` (nearest expiry without DTEs)."""
+    if any(item[1] for item in usable):
+        best_dte = min(
+            (item[1] for item in usable if item[1]),
+            key=lambda d: abs(d - target_dte),
+        )
+        return [item for item in usable if item[1] == best_dte]
+    nearest_expiry = min(item[0] for item in usable)
+    return [item for item in usable if item[0] == nearest_expiry]
+
+
 def extract_atm_iv(contracts, spot, target_dte=30, now_dt=None, dte_fn=None):
     """Pick the implied volatility of the contract closest to at-the-money.
 
@@ -203,34 +232,17 @@ def extract_atm_iv(contracts, spot, target_dte=30, now_dt=None, dte_fn=None):
     if not contracts or not spot or spot <= 0:
         return None
 
-    usable = []
-    for expiration_dt, option in contracts:
-        iv = option.get("impliedVolatility")
-        strike = option.get("strike")
-        if expiration_dt is None or not iv or not strike:
-            continue
-        try:
-            iv = float(iv)
-            strike = float(strike)
-        except (TypeError, ValueError):
-            continue
-        if iv <= 0 or strike <= 0:
-            continue
-        dte = dte_fn(expiration_dt, now_dt) if dte_fn else None
-        usable.append((expiration_dt, dte, strike, iv))
-
+    usable = [
+        item
+        for item in (
+            _usable_contract(expiration_dt, option, now_dt, dte_fn)
+            for expiration_dt, option in contracts
+        )
+        if item is not None
+    ]
     if not usable:
         return None
 
-    if any(item[1] for item in usable):
-        best_dte = min(
-            (item[1] for item in usable if item[1]),
-            key=lambda d: abs(d - target_dte),
-        )
-        usable = [item for item in usable if item[1] == best_dte]
-    else:
-        nearest_expiry = min(item[0] for item in usable)
-        usable = [item for item in usable if item[0] == nearest_expiry]
-
+    usable = _closest_expiry_contracts(usable, target_dte)
     _, _, _, atm_iv = min(usable, key=lambda item: abs(item[2] - spot))
     return atm_iv

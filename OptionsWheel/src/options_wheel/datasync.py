@@ -11,7 +11,8 @@ on a dedicated ``ow-data`` branch with this layout::
 ``pull`` brings that data into ``data/`` without overwriting local files (the
 IV history is merged by date), ``push`` copies local data into the checkout.
 A pre-split ``history/iv_history.json`` is read too, and the destination copy
-is converted to per-date files and deleted.
+is converted to per-date files and deleted. The checkout must sit inside the
+folder that contains this repository (e.g. ``../ow-data`` next to it).
 
 Usage::
 
@@ -32,6 +33,25 @@ MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(MODULE_DIR, "..", ".."))
 LOCAL_HISTORY_DIR = os.path.join(PROJECT_ROOT, "data", "history")
 LOCAL_OUTPUT_DIR = os.path.join(PROJECT_ROOT, "data", "output")
+# The data-branch checkout lives next to the repository, e.g. ``../ow-data``.
+WORKSPACE_ROOT = os.path.dirname(os.path.dirname(PROJECT_ROOT))
+
+
+def resolve_data_dir(path, root=WORKSPACE_ROOT):
+    """Canonical ``path``; refused unless it lies inside ``root``.
+
+    Sync deletes and overwrites files below the data directory, so a path that
+    escapes the workspace is rejected instead of trusted.
+    """
+    root = os.path.realpath(root)
+    resolved = os.path.realpath(path)
+    try:
+        inside = os.path.commonpath([root, resolved]) == root
+    except ValueError:  # different drives on Windows
+        inside = False
+    if not inside or resolved == root:
+        raise ValueError(f"Data directory must be inside {root}: {path}")
+    return resolved
 
 
 def merge_iv_history(source_history, target_history):
@@ -97,9 +117,16 @@ def sync(direction, data_dir, history_dir=LOCAL_HISTORY_DIR, output_dir=LOCAL_OU
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("direction", choices=["pull", "push"])
-    parser.add_argument("data_dir", help="Checkout of the data branch (e.g. a git worktree).")
+    parser.add_argument(
+        "data_dir",
+        help="Checkout of the data branch (e.g. a git worktree) next to the repository.",
+    )
     args = parser.parse_args()
-    stats = sync(args.direction, args.data_dir)
+    try:
+        data_dir = resolve_data_dir(args.data_dir)
+    except ValueError as e:
+        parser.error(str(e))
+    stats = sync(args.direction, data_dir)
     print(
         f"{args.direction}: {stats['iv_observations']} IV observations merged, "
         f"{stats['scans']} scans and {stats['outputs']} outputs copied."

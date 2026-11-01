@@ -8,10 +8,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
-    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.css">
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.3.2/dist/js-yaml.min.js" integrity="sha384-uwLg6oO8ZhFG2SuQfgmkMtosjtrFYlkPspa/cXS+b3D8GLRTHMDl/mTwqImdlKQO" crossorigin="anonymous"></script>
+    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.css" integrity="sha384-IDaX67uymf7bFJTnGqJdas2mKfz+0XonrvcR/ZLiQBW4NCINz7BMJYwX+6tlg9y0" crossorigin="anonymous">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha384-vtXRMe3mGCbOeY7l30aIg8H9p3GdeSe4IFlP6G8JMa7o7lXvnz3GFKzPxzJdPfGK" crossorigin="anonymous"></script>
+    <script type="text/javascript" charset="utf8" src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.js" integrity="sha384-Ac/mQjmhtk+4qELB13f2LKT/9Uj31QqaXFKrEbmLtueYjPwTG6AXdzXqZSWWwUW1" crossorigin="anonymous"></script>
     <style>
         :root {
             --bg-page: #0d1117;
@@ -88,6 +88,7 @@
             --ok-bg: #dafbe1;
             --warn-bg: #fff8c5;
             --bad-bg: #ffebe9;
+            color-scheme: light;
         }
 
         body {
@@ -104,10 +105,6 @@
             color-scheme: dark;
         }
 
-        body[data-theme='light'] {
-            color-scheme: light;
-        }
-
         .font-mono {
             font-family: 'IBM Plex Mono', monospace;
             letter-spacing: -0.02em;
@@ -122,12 +119,12 @@
         }
 
         header h1 {
-            color: #f0f6fc !important;
+            color: #f0f6fc;
             letter-spacing: -0.01em;
         }
 
         body[data-theme='light'] header h1 {
-            color: #0f1d33 !important;
+            color: #0f1d33;
         }
 
         @media (min-width: 768px) {
@@ -180,7 +177,7 @@
             font-size: 0.78rem;
             font-weight: 700;
             letter-spacing: 0.02em;
-            transition: all 0.15s ease;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
         }
 
         .toggle-btn {
@@ -205,6 +202,14 @@
             border-radius: 10px;
             overflow: hidden;
             background: var(--bg-elevated);
+        }
+
+        .segmented-group {
+            display: flex;
+            margin: 0;
+            padding: 0;
+            border: 0;
+            min-width: auto;
         }
 
         .segmented button {
@@ -236,7 +241,7 @@
 
         #tableToolbar .dataTables_length,
         #tableToolbar .dataTables_filter {
-            float: none !important;
+            float: none;
             margin: 0;
             padding: 0;
         }
@@ -249,7 +254,7 @@
         .dataTables_wrapper .dataTables_length label,
         .dataTables_wrapper .dataTables_filter label,
         .dataTables_wrapper .dataTables_info {
-            color: var(--text-muted) !important;
+            color: var(--text-muted);
             font-size: 0.81rem;
             font-weight: 700;
             letter-spacing: 0.02em;
@@ -279,13 +284,13 @@
 
         .dataTables_wrapper .dataTables_filter input,
         .dataTables_wrapper .dataTables_length select {
-            border: 1px solid var(--line-strong) !important;
-            background: var(--control-bg) !important;
+            border: 1px solid var(--line-strong);
+            background: var(--control-bg);
             border-radius: 10px;
             height: 2.15rem;
             font-size: 0.86rem;
             color: var(--text-main);
-            margin-left: 0 !important;
+            margin-left: 0;
             padding: 0 0.7rem;
              box-shadow: inset 0 1px 0 rgba(240, 246, 252, 0.03), 0 1px 2px rgba(1, 4, 9, 0.4);
         }
@@ -318,8 +323,8 @@
         .dataTables_wrapper .dataTables_filter input:focus,
         .dataTables_wrapper .dataTables_length select:focus {
             outline: none;
-            border-color: var(--accent) !important;
-            background: var(--control-bg-focus) !important;
+            border-color: var(--accent);
+            background: var(--control-bg-focus);
              box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.22);
         }
 
@@ -333,22 +338,22 @@
         }
 
         table.dataTable {
-            border-collapse: separate !important;
+            border-collapse: separate;
             border-spacing: 0;
-            margin-top: 0 !important;
-            width: 100% !important;
+            margin-top: 0;
+            width: 100%;
         }
 
         table.dataTable thead th {
-            border-bottom: 1px solid var(--line-strong) !important;
+            border-bottom: 1px solid var(--line-strong);
             border-top: 1px solid var(--line-soft);
-            background: linear-gradient(180deg, var(--head-grad-start) 0%, var(--head-grad-end) 100%) !important;
-            color: var(--text-main) !important;
+            background: linear-gradient(180deg, var(--head-grad-start) 0%, var(--head-grad-end) 100%);
+            color: var(--text-main);
             font-size: 0.74rem;
             text-transform: uppercase;
             letter-spacing: 0.04em;
-            font-weight: 800 !important;
-            padding: 0.64rem 0.72rem !important;
+            font-weight: 800;
+            padding: 0.64rem 0.72rem;
             white-space: nowrap;
             position: relative;
         }
@@ -385,7 +390,7 @@
 
         #resultsTable tbody td {
             border-bottom: 1px solid var(--line-soft);
-            padding: 0.52rem 0.72rem !important;
+            padding: 0.52rem 0.72rem;
             line-height: 1.25;
             white-space: nowrap;
             font-size: 0.82rem;
@@ -401,7 +406,7 @@
         }
 
         #resultsTable tbody tr:hover {
-            background: var(--row-hover) !important;
+            background: var(--row-hover);
         }
 
         #resultsTable thead th {
@@ -460,7 +465,7 @@
         #resultsTable td:nth-child(22),
         #resultsTable th:nth-child(23),
         #resultsTable td:nth-child(23) {
-            border-left: 2px solid var(--group-divider) !important;
+            border-left: 2px solid var(--group-divider);
         }
 
         #resultsTable thead th[data-group]::before {
@@ -475,7 +480,7 @@
 
         body[data-density='compact'] table.dataTable thead th {
             font-size: 0.7rem;
-            padding: 0.5rem 0.62rem !important;
+            padding: 0.5rem 0.62rem;
         }
 
         body[data-density='compact'] {
@@ -483,13 +488,13 @@
         }
 
         body[data-density='compact'] #resultsTable tbody td {
-            padding: 0.42rem 0.62rem !important;
+            padding: 0.42rem 0.62rem;
             font-size: 0.77rem;
         }
 
         body[data-density='ultra'] table.dataTable thead th {
             font-size: 0.65rem;
-            padding: 0.42rem 0.52rem !important;
+            padding: 0.42rem 0.52rem;
         }
 
         body[data-density='ultra'] {
@@ -497,14 +502,14 @@
         }
 
         body[data-density='ultra'] #resultsTable tbody td {
-            padding: 0.34rem 0.52rem !important;
+            padding: 0.34rem 0.52rem;
             font-size: 0.71rem;
             line-height: 1.14;
         }
 
         body[data-density='comfortable'] table.dataTable thead th {
             font-size: 0.78rem;
-            padding: 0.74rem 0.8rem !important;
+            padding: 0.74rem 0.8rem;
         }
 
         body[data-density='comfortable'] {
@@ -512,7 +517,7 @@
         }
 
         body[data-density='comfortable'] #resultsTable tbody td {
-            padding: 0.66rem 0.8rem !important;
+            padding: 0.66rem 0.8rem;
             font-size: 0.86rem;
         }
 
@@ -525,24 +530,30 @@
         }
 
         .dataTables_wrapper .dataTables_paginate .paginate_button {
-            border-radius: 8px !important;
-            border: 1px solid transparent !important;
+            border-radius: 8px;
+            border: 1px solid transparent;
             font-weight: 700;
             color: var(--paginate-text) !important;
             min-width: 2rem;
-            padding: 0.25rem 0.45rem !important;
+            padding: 0.25rem 0.45rem;
         }
 
         .dataTables_wrapper .dataTables_paginate .paginate_button:hover {
-            background: var(--paginate-hover-bg) !important;
-            border-color: var(--paginate-hover-border) !important;
             color: var(--paginate-hover-text) !important;
         }
 
         .dataTables_wrapper .dataTables_paginate .paginate_button.current {
-            background: var(--accent) !important;
             color: white !important;
-            border: 1px solid var(--accent) !important;
+        }
+
+        body .dataTables_wrapper .dataTables_paginate .paginate_button.paginate_button:hover {
+            background: var(--paginate-hover-bg);
+            border-color: var(--paginate-hover-border);
+        }
+
+        body .dataTables_wrapper .dataTables_paginate .paginate_button.paginate_button.current {
+            background: var(--accent);
+            border: 1px solid var(--accent);
         }
 
         @media (max-width: 768px) {
@@ -567,19 +578,19 @@
             }
         }
 
-        .bg-white { background-color: var(--bg-elevated) !important; }
-        .bg-gray-50 { background-color: var(--bg-muted) !important; }
-        .border-gray-100, .border-gray-200, .border-gray-300 { border-color: var(--line-soft) !important; }
-        .text-gray-900, .text-gray-800, .text-gray-700, .text-gray-600 { color: var(--text-main) !important; }
-        .text-gray-500 { color: var(--text-muted) !important; }
-        .text-blue-500, .text-blue-600, .text-indigo-500 { color: var(--accent) !important; }
-        .text-green-500, .text-green-800, .text-emerald-600, .text-emerald-700 { color: var(--ok-text) !important; }
-        .text-amber-500, .text-amber-600, .text-amber-700 { color: var(--warn-text) !important; }
-        .text-red-600, .text-red-700, .text-red-800 { color: var(--bad-text) !important; }
-        .bg-green-100, .bg-emerald-100 { background-color: var(--ok-bg) !important; }
-        .bg-amber-100 { background-color: var(--warn-bg) !important; }
-        .bg-red-100 { background-color: var(--bad-bg) !important; }
-        .hover\:bg-gray-50:hover { background-color: var(--bg-muted) !important; }
+        body .bg-white, #summary > .bg-white { background-color: var(--bg-elevated); }
+        body .bg-gray-50 { background-color: var(--bg-muted); }
+        body .border-gray-100, body .border-gray-200, body .border-gray-300 { border-color: var(--line-soft); }
+        body .text-gray-900, body .text-gray-800, body .text-gray-700, body .text-gray-600 { color: var(--text-main); }
+        body .text-gray-500 { color: var(--text-muted); }
+        body .text-blue-500, body .text-blue-600, body .text-indigo-500 { color: var(--accent); }
+        body .text-green-500, body .text-green-800, body .text-emerald-600, body .text-emerald-700 { color: var(--ok-text); }
+        body .text-amber-500, body .text-amber-600, body .text-amber-700 { color: var(--warn-text); }
+        body .text-red-600, body .text-red-700, body .text-red-800 { color: var(--bad-text); }
+        body .bg-green-100, body .bg-emerald-100 { background-color: var(--ok-bg); }
+        body .bg-amber-100 { background-color: var(--warn-bg); }
+        body .bg-red-100 { background-color: var(--bad-bg); }
+        body .hover\:bg-gray-50:hover { background-color: var(--bg-muted); }
 
         /* Delta dual-range slider */
         .delta-range-wrap {
@@ -653,15 +664,17 @@
         }
 
         /* Detail Panel Styling */
-        tr.shown {
-            background: var(--row-hover) !important;
+        #resultsTable tbody tr.shown {
+            background: var(--row-hover);
         }
-        tr.shown td {
-            border-bottom: none !important;
+        #resultsTable tbody tr.shown td {
+            border-bottom: none;
         }
         tr.details-tr td {
-            padding: 0 !important;
-            border-bottom: 2px solid var(--accent) !important;
+            padding: 0;
+        }
+        #resultsTable tbody tr.details-tr td {
+            border-bottom: 2px solid var(--accent);
         }
         .details-panel {
             background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-elevated) 100%);
@@ -984,12 +997,12 @@
             background: color-mix(in srgb, var(--warn-bg) 60%, transparent);
         }
 
-        .chain-positive { color: #00cfa5 !important; }
-        .chain-negative { color: #ff285f !important; }
-        .chain-delta { color: #58a6ff !important; }
-        .chain-iv { color: #c77dff !important; }
-        .chain-pop { color: #15d9c4 !important; }
-        .chain-muted { color: var(--text-muted) !important; }
+        .chain-table .chain-positive { color: #00cfa5; }
+        .chain-table .chain-negative { color: #ff285f; }
+        .chain-table .chain-delta { color: #58a6ff; }
+        .chain-table .chain-iv { color: #c77dff; }
+        .chain-table .chain-pop { color: #15d9c4; }
+        .chain-table .chain-muted { color: var(--text-muted); }
 
         .chain-dialog-footer {
             display: flex;
@@ -1057,16 +1070,20 @@
                 <p id="last-updated" class="text-gray-500 text-sm mt-1">Loading data...</p>
             </div>
             <div class="top-controls">
-                <div class="segmented" role="group" aria-label="Option type">
-                    <button id="typePut" type="button" class="active" aria-pressed="true">Sell Put</button>
-                    <button id="typeCall" type="button" aria-pressed="false">Sell Call</button>
-                </div>
+                <fieldset class="segmented-group" aria-label="Option type">
+                    <div class="segmented">
+                        <button id="typePut" type="button" class="active" aria-pressed="true">Sell Put</button>
+                        <button id="typeCall" type="button" aria-pressed="false">Sell Call</button>
+                    </div>
+                </fieldset>
                 <button id="themeToggle" type="button" class="toggle-btn">Switch to Light Mode</button>
-                <div class="segmented" role="group" aria-label="Row density">
-                    <button id="densityUltra" type="button" aria-pressed="false">Ultra</button>
-                    <button id="densityCompact" type="button" class="active" aria-pressed="true">Compact</button>
-                    <button id="densityComfortable" type="button" aria-pressed="false">Comfortable</button>
-                </div>
+                <fieldset class="segmented-group" aria-label="Row density">
+                    <div class="segmented">
+                        <button id="densityUltra" type="button" aria-pressed="false">Ultra</button>
+                        <button id="densityCompact" type="button" class="active" aria-pressed="true">Compact</button>
+                        <button id="densityComfortable" type="button" aria-pressed="false">Comfortable</button>
+                    </div>
+                </fieldset>
             </div>
         </header>
         
@@ -1179,9 +1196,9 @@
                     </label>
                 </div>
 
-                <div id="chainDialogStatus" class="chain-status" role="status" aria-live="polite">
+                <output id="chainDialogStatus" class="chain-status" aria-live="polite">
                     Loading option chain…
-                </div>
+                </output>
 
                 <div id="chainTableWrap" class="chain-table-wrap" hidden>
                     <table class="chain-table">
@@ -1264,14 +1281,14 @@
 
             const applyTheme = theme => {
                 const safeTheme = theme === 'light' ? 'light' : 'dark';
-                bodyEl.setAttribute('data-theme', safeTheme);
+                bodyEl.dataset.theme = safeTheme;
                 themeToggleBtn.textContent = safeTheme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode';
                 localStorage.setItem(themeStorageKey, safeTheme);
             };
 
             const applyDensity = density => {
                 const safeDensity = ['ultra', 'compact', 'comfortable'].includes(density) ? density : 'compact';
-                bodyEl.setAttribute('data-density', safeDensity);
+                bodyEl.dataset.density = safeDensity;
                 densityUltraBtn.classList.toggle('active', safeDensity === 'ultra');
                 densityUltraBtn.setAttribute('aria-pressed', safeDensity === 'ultra' ? 'true' : 'false');
                 densityCompactBtn.classList.toggle('active', safeDensity === 'compact');
@@ -1486,9 +1503,12 @@
 
                 const bid = Number(contract.bid);
                 const lastPrice = Number(contract.lastPrice);
-                const credit = Number.isFinite(bid) && bid > 0
-                    ? bid
-                    : Number.isFinite(lastPrice) && lastPrice > 0 ? lastPrice : 0;
+                let credit = 0;
+                if (Number.isFinite(bid) && bid > 0) {
+                    credit = bid;
+                } else if (Number.isFinite(lastPrice) && lastPrice > 0) {
+                    credit = lastPrice;
+                }
                 const breakEven = isCall ? strike + credit : strike - credit;
                 if (breakEven <= 0) {
                     return { delta, pop: null };
@@ -1505,6 +1525,66 @@
             const getSelectedChainGroup = () => {
                 const groups = Array.isArray(chainData?.options) ? chainData.options : [];
                 return groups.find(group => String(group.expirationDate) === chainSelectedExpiration) || groups[0] || null;
+            };
+
+            const getChainSpreadClass = spreadPct => {
+                if (spreadPct == null) {
+                    return 'chain-muted';
+                }
+                return spreadPct <= 20 ? 'chain-positive' : 'chain-negative';
+            };
+
+            const getChainChangeClass = changePct => {
+                if (!Number.isFinite(changePct) || changePct === 0) {
+                    return 'chain-muted';
+                }
+                return changePct > 0 ? 'chain-positive' : 'chain-negative';
+            };
+
+            const formatChainChange = changePct => {
+                if (!Number.isFinite(changePct)) {
+                    return '—';
+                }
+                const sign = changePct > 0 ? '+' : '';
+                return `${sign}${formatChainNumber(changePct)}%`;
+            };
+
+            const formatChainPercent = (value, scale = 1) => (
+                value == null ? '—' : `${formatChainNumber(Number(value) * scale, 1, 1)}%`
+            );
+
+            const renderChainRow = (contract, group, isCall, currentPrice) => {
+                const strike = Number(contract.strike);
+                const bid = Number(contract.bid);
+                const ask = Number(contract.ask);
+                const midpoint = bid > 0 && ask > 0 ? (bid + ask) / 2 : null;
+                const spreadPct = midpoint > 0 ? ((ask - bid) / midpoint) * 100 : null;
+                const changePct = Number(contract.percentChange);
+                const { delta, pop } = calculateChainRisk(contract, isCall);
+                const isItm = Number.isFinite(currentPrice) && Number.isFinite(strike) &&
+                    (isCall ? strike < currentPrice : strike > currentPrice);
+                const spreadClass = getChainSpreadClass(spreadPct);
+                const changeClass = getChainChangeClass(changePct);
+                const changeText = formatChainChange(changePct);
+                const rowClass = isItm ? 'chain-itm' : '';
+                const deltaText = delta == null ? '—' : formatChainNumber(delta, 2, 2);
+
+                return `
+                        <tr class="${rowClass}">
+                            <td>${escapeHtml(formatChainDate(contract.expiration || group.expirationDate))}</td>
+                            <td class="font-bold">${formatChainNumber(strike)}</td>
+                            <td>${formatChainNumber(contract.lastPrice)}</td>
+                            <td class="chain-positive font-bold">${formatChainNumber(contract.bid)}</td>
+                            <td class="chain-negative font-bold">${formatChainNumber(contract.ask)}</td>
+                            <td class="${spreadClass} font-bold">${formatChainPercent(spreadPct)}</td>
+                            <td class="${changeClass}">${changeText}</td>
+                            <td>${formatChainNumber(contract.volume, 0, 0)}</td>
+                            <td>${formatChainNumber(contract.openInterest, 0, 0)}</td>
+                            <td class="chain-iv font-bold">${formatChainPercent(contract.impliedVolatility, 100)}</td>
+                            <td class="chain-delta font-bold">${deltaText}</td>
+                            <td class="chain-pop font-bold">${formatChainPercent(pop, 100)}</td>
+                        </tr>
+                    `;
             };
 
             const renderOptionChain = () => {
@@ -1531,41 +1611,9 @@
                 optionChainSubtitle.textContent = `Underlying Price: ${formatChainNumber(currentPrice)}`;
 
                 chainExpirationSelect.value = chainSelectedExpiration;
-                chainTableBody.innerHTML = contracts.map(contract => {
-                    const strike = Number(contract.strike);
-                    const bid = Number(contract.bid);
-                    const ask = Number(contract.ask);
-                    const midpoint = bid > 0 && ask > 0 ? (bid + ask) / 2 : null;
-                    const spreadPct = midpoint > 0 ? ((ask - bid) / midpoint) * 100 : null;
-                    const changePct = Number(contract.percentChange);
-                    const { delta, pop } = calculateChainRisk(contract, isCall);
-                    const isItm = Number.isFinite(currentPrice) && Number.isFinite(strike) &&
-                        (isCall ? strike < currentPrice : strike > currentPrice);
-                    const spreadClass = spreadPct == null ? 'chain-muted' : spreadPct <= 20 ? 'chain-positive' : 'chain-negative';
-                    const changeClass = !Number.isFinite(changePct)
-                        ? 'chain-muted'
-                        : changePct > 0 ? 'chain-positive' : changePct < 0 ? 'chain-negative' : 'chain-muted';
-                    const changeText = Number.isFinite(changePct)
-                        ? `${changePct > 0 ? '+' : ''}${formatChainNumber(changePct)}%`
-                        : '—';
-
-                    return `
-                        <tr class="${isItm ? 'chain-itm' : ''}">
-                            <td>${escapeHtml(formatChainDate(contract.expiration || group.expirationDate))}</td>
-                            <td class="font-bold">${formatChainNumber(strike)}</td>
-                            <td>${formatChainNumber(contract.lastPrice)}</td>
-                            <td class="chain-positive font-bold">${formatChainNumber(contract.bid)}</td>
-                            <td class="chain-negative font-bold">${formatChainNumber(contract.ask)}</td>
-                            <td class="${spreadClass} font-bold">${spreadPct == null ? '—' : `${formatChainNumber(spreadPct, 1, 1)}%`}</td>
-                            <td class="${changeClass}">${changeText}</td>
-                            <td>${formatChainNumber(contract.volume, 0, 0)}</td>
-                            <td>${formatChainNumber(contract.openInterest, 0, 0)}</td>
-                            <td class="chain-iv font-bold">${contract.impliedVolatility == null ? '—' : `${formatChainNumber(Number(contract.impliedVolatility) * 100, 1, 1)}%`}</td>
-                            <td class="chain-delta font-bold">${delta == null ? '—' : formatChainNumber(delta, 2, 2)}</td>
-                            <td class="chain-pop font-bold">${pop == null ? '—' : `${formatChainNumber(pop * 100, 1, 1)}%`}</td>
-                        </tr>
-                    `;
-                }).join('');
+                chainTableBody.innerHTML = contracts
+                    .map(contract => renderChainRow(contract, group, isCall, currentPrice))
+                    .join('');
 
                 chainDialogStatus.hidden = true;
                 chainDialogControls.hidden = false;
@@ -1632,7 +1680,7 @@
                     }
                     const data = await response.json();
                     if (!Array.isArray(data?.options)) {
-                        throw new Error('Option service returned an invalid response.');
+                        throw new TypeError('Option service returned an invalid response.');
                     }
 
                     chainData = data;
@@ -1759,7 +1807,7 @@
             applyColumnWidthOverrides();
 
             themeToggleBtn.addEventListener('click', () => {
-                const nextTheme = bodyEl.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                const nextTheme = bodyEl.dataset.theme === 'dark' ? 'light' : 'dark';
                 applyTheme(nextTheme);
             });
 
@@ -1778,6 +1826,481 @@
                     applyOptionType('call');
                     loadDashboardData();
                 }
+            });
+
+            const debounce = (fn, wait = 200) => {
+                let timeoutId;
+                return (...args) => {
+                    clearTimeout(timeoutId);
+                    timeoutId = setTimeout(() => fn(...args), wait);
+                };
+            };
+
+            const textTierClasses = {
+                missing: 'text-gray-500',
+                ok: 'text-emerald-600',
+                near: 'text-amber-600',
+                low: 'text-red-600'
+            };
+            const strongTextTierClasses = { ...textTierClasses, ok: 'text-emerald-600 font-semibold' };
+            const scoreTierClasses = {
+                missing: 'text-gray-500',
+                ok: 'text-emerald-700',
+                near: 'text-amber-700',
+                low: 'text-red-700'
+            };
+            const yieldCueLabels = { missing: 'N/A', ok: 'OK', near: 'Near', low: 'Low' };
+
+            const pickTier = (isMissing, meetsTarget, nearTarget, tiers) => {
+                if (isMissing) {
+                    return tiers.missing;
+                }
+                if (meetsTarget) {
+                    return tiers.ok;
+                }
+                return nearTarget ? tiers.near : tiers.low;
+            };
+
+            const isWithin = (value, min, max) => value >= min && value <= max;
+
+            const getSignalClass = (value, lowLimit, highLimit, lowClass, highClass) => {
+                if (value == null) {
+                    return 'text-gray-600';
+                }
+                if (value < lowLimit) {
+                    return lowClass;
+                }
+                return value > highLimit ? highClass : 'text-gray-600';
+            };
+
+            const formatFixed = (value, digits, suffix = '') => (value != null ? value.toFixed(digits) + suffix : 'N/A');
+            const formatNumberFixed = (value, digits) => (value != null ? Number(value).toFixed(digits) : 'N/A');
+
+            const getDashboardThresholds = config => ({
+                targetMonthlyYield: Number(config.TARGET_MONTHLY_YIELD_PCT ?? 1.0),
+                minAbsDelta: Number(config.MIN_ABS_DELTA ?? 0.0),
+                maxAbsDelta: Number(config.MAX_ABS_DELTA ?? 0.3),
+                minDte: Number(config.MIN_DTE ?? 7),
+                maxDte: Number(config.MAX_DTE ?? 60),
+                minOtmPct: Number(config.MIN_OTM_PCT ?? 0.0),
+                maxSpreadPct: Number(config.MAX_SPREAD_PCT ?? 20.0),
+                scoreHighThreshold: 75,
+                scoreMidThreshold: 55
+            });
+
+            const getResultRowText = r => {
+                const symbolRaw = r.Symbol != null ? String(r.Symbol) : '';
+                const symbolDisplayRaw = symbolRaw.length > 9 ? `${symbolRaw.slice(0, 8)}...` : (symbolRaw || 'N/A');
+                return {
+                    symbolRaw,
+                    symbolTitle: escapeHtml(symbolRaw || 'N/A'),
+                    symbolLabel: escapeHtml(symbolRaw),
+                    symbolText: escapeHtml(symbolDisplayRaw),
+                    symbolHref: `https://finance.yahoo.com/quote/${encodeURIComponent(symbolRaw)}/`,
+                    nameText: escapeHtml(r.Name != null ? String(r.Name) : 'N/A'),
+                    expirationText: escapeHtml(r.Expiration != null ? String(r.Expiration) : 'N/A'),
+                    nextEarningsText: escapeHtml(r.NextEarnings != null ? String(r.NextEarnings) : 'N/A')
+                };
+            };
+
+            const getResultRowClasses = (r, thresholds) => {
+                const monthlyYield = r.MonthlyYieldPct;
+                const spreadPct = r.SpreadPct;
+                const score = r.Score;
+                const absDelta = r.Delta != null ? Math.abs(r.Delta) : null;
+                const dte = r.DTE != null ? Number(r.DTE) : null;
+                const yieldMissing = monthlyYield == null;
+                const yieldMeets = monthlyYield >= thresholds.targetMonthlyYield;
+                const yieldNear = monthlyYield >= (thresholds.targetMonthlyYield * 0.8);
+
+                return {
+                    yieldClass: pickTier(yieldMissing, yieldMeets, yieldNear, textTierClasses),
+                    yieldCue: pickTier(yieldMissing, yieldMeets, yieldNear, yieldCueLabels),
+                    spreadClass: pickTier(
+                        spreadPct == null,
+                        spreadPct <= thresholds.maxSpreadPct,
+                        spreadPct <= (thresholds.maxSpreadPct * 1.25),
+                        textTierClasses
+                    ),
+                    otmClass: pickTier(
+                        r.OTMPct == null,
+                        r.OTMPct >= thresholds.minOtmPct,
+                        r.OTMPct >= (thresholds.minOtmPct * 0.8),
+                        textTierClasses
+                    ),
+                    deltaClass: pickTier(
+                        absDelta == null,
+                        isWithin(absDelta, thresholds.minAbsDelta, thresholds.maxAbsDelta),
+                        isWithin(absDelta, thresholds.minAbsDelta * 0.8, thresholds.maxAbsDelta * 1.2),
+                        textTierClasses
+                    ),
+                    scoreClass: pickTier(
+                        score == null,
+                        score >= thresholds.scoreHighThreshold,
+                        score >= thresholds.scoreMidThreshold,
+                        scoreTierClasses
+                    ),
+                    dteClass: pickTier(
+                        dte == null || Number.isNaN(dte),
+                        isWithin(dte, thresholds.minDte, thresholds.maxDte),
+                        isWithin(dte, thresholds.minDte * 0.8, thresholds.maxDte * 1.2),
+                        textTierClasses
+                    ),
+                    ivRankClass: pickTier(r.IVRank == null, r.IVRank >= 0.5, r.IVRank >= 0.3, strongTextTierClasses),
+                    vrpClass: pickTier(r.VRPRatio == null, r.VRPRatio >= 1.2, r.VRPRatio >= 1.0, strongTextTierClasses),
+                    creditRiskClass: pickTier(
+                        r.CreditRiskRatio == null,
+                        r.CreditRiskRatio >= 1.0,
+                        r.CreditRiskRatio >= 0.6,
+                        strongTextTierClasses
+                    ),
+                    ivhvClass: pickTier(
+                        r.IVHVPercentile == null,
+                        r.IVHVPercentile >= 0.5,
+                        r.IVHVPercentile >= 0.3,
+                        textTierClasses
+                    ),
+                    rsiClass: getSignalClass(r.RSI, 35, 65, 'text-red-600', 'text-amber-600'),
+                    adxClass: r.ADX != null && r.ADX > 25 ? 'text-amber-600 font-semibold' : 'text-gray-600',
+                    diffClass: getSignalClass(r.DiffPct, -5, 5, 'text-red-600', 'text-emerald-600')
+                };
+            };
+
+            const getStatusBadge = r => {
+                const isPass = String(r.Status || '').toUpperCase() === 'PASS';
+                if (isPass) {
+                    return { icon: '✓', label: 'PASS', order: 0, badgeClass: 'bg-green-100 text-green-800' };
+                }
+                return { icon: '!', label: 'REVIEW', order: 1, badgeClass: 'bg-amber-100 text-amber-800' };
+            };
+
+            const getEarningsBadge = r => {
+                if (r.EarningsBeforeExpiry == null) {
+                    return { badgeClass: 'bg-gray-100 text-gray-700', text: 'N/A', order: 0 };
+                }
+                if (r.EarningsBeforeExpiry !== true) {
+                    return { badgeClass: 'bg-emerald-100 text-emerald-800', text: 'No', order: 0 };
+                }
+                const text = r.EarningsMovePct != null ? `Yes ±${Number(r.EarningsMovePct).toFixed(1)}%` : 'Yes';
+                return { badgeClass: 'bg-red-100 text-red-800', text, order: 1 };
+            };
+
+            const getEvDisplay = evVal => {
+                if (evVal == null) {
+                    return { evClass: 'text-gray-500', evText: 'N/A' };
+                }
+                let evClass = 'text-gray-700';
+                if (evVal > 0) {
+                    evClass = 'text-emerald-600 font-semibold';
+                } else if (evVal < 0) {
+                    evClass = 'text-red-600';
+                }
+                const sign = evVal > 0 ? '+' : '';
+                return { evClass, evText: `${sign}${evVal.toFixed(2)}` };
+            };
+
+            const getPopDisplay = popVal => {
+                if (popVal == null) {
+                    return { popClass: 'text-gray-500', popText: 'N/A' };
+                }
+                return {
+                    popClass: pickTier(false, popVal >= 80, popVal >= 70, strongTextTierClasses),
+                    popText: `${popVal.toFixed(1)}%`
+                };
+            };
+
+            const exDivBadges = new Map([
+                ['HIGH', {
+                    className: 'inline-flex items-center justify-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200 animate-pulse cursor-help',
+                    title: 'High early assignment risk! Dividend amount exceeds extrinsic value of the call option during its life.',
+                    label: '⚠️ Early Assign Risk'
+                }],
+                ['MEDIUM', {
+                    className: 'inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200 cursor-help',
+                    title: 'Ex-dividend date occurs during contract life. Premium contains enough extrinsic value to reduce early exercise risk.',
+                    label: 'Ex-Div Overlap'
+                }],
+                ['DIVIDEND_DROP', {
+                    className: 'inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 border border-orange-200 cursor-help',
+                    title: 'Ex-dividend occurs during contract life. Underlying price will drop on ex-dividend date, increasing ITM risk for put sellers.',
+                    label: '⚠️ Price Drop Risk'
+                }]
+            ]);
+
+            const buildExDivHtml = r => {
+                const exDivDate = r.ExDividendDate;
+                const badge = exDivBadges.get(r.ExDivRisk || 'NONE');
+                if (!exDivDate || !badge) {
+                    return '';
+                }
+                return `
+                    <div class="mt-1 flex flex-col gap-0.5">
+                        <span class="${badge.className}" style="width: fit-content;" title="${badge.title}">
+                            ${badge.label}
+                        </span>
+                        <span class="text-[10px] text-gray-500 font-mono">Ex-Div: ${escapeHtml(exDivDate)}</span>
+                    </div>
+                `;
+            };
+
+            const buildResultRow = (r, idx, thresholds) => {
+                const text = getResultRowText(r);
+                const classes = getResultRowClasses(r, thresholds);
+                const status = getStatusBadge(r);
+                const earnings = getEarningsBadge(r);
+                const { evClass, evText } = getEvDisplay(r.EV);
+                const { popClass, popText } = getPopDisplay(r.PoP);
+                const exDivHtml = buildExDivHtml(r);
+
+                return `
+                    <tr data-index="${idx}" class="cursor-pointer hover:bg-opacity-50">
+                        <td class="px-4 py-4 font-bold text-blue-600 font-mono" title="${text.symbolTitle}">
+                            <div class="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                <a href="${text.symbolHref}" target="_blank" rel="noopener noreferrer" class="shrink-0 hover:underline inline-block w-16 whitespace-nowrap">${text.symbolText}</a>
+                                <button type="button" class="option-chain-btn" data-index="${idx}" aria-label="View option chain for ${text.symbolLabel}" title="View option chain for ${text.symbolLabel}">⌥</button>
+                            </div>
+                        </td>
+                        <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${text.nameText}">${text.nameText}</td>
+                        <td class="px-4 py-4" data-order="${status.order}">
+                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${status.badgeClass}">
+                                <span aria-hidden="true">${status.icon}</span>${status.label}
+                            </span>
+                        </td>
+                        <td class="px-4 py-4 font-mono text-gray-700 font-medium text-right">${formatMoney(r.Price)}</td>
+                        <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.Strike)}</td>
+                        <td class="px-4 py-4 text-gray-600">
+                            <div class="font-semibold font-mono">${text.expirationText}</div>
+                            ${exDivHtml}
+                        </td>
+                        <td class="px-4 py-4 text-gray-600">${text.nextEarningsText}</td>
+                        <td class="px-4 py-4 text-center" data-order="${earnings.order}">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${earnings.badgeClass}">${earnings.text}</span>
+                        </td>
+                        <td class="px-4 py-4 ${classes.dteClass} text-right">${r.DTE ?? 'N/A'}</td>
+                        <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.Premium)}</td>
+                        <td class="px-4 py-4 font-mono ${evClass} text-right">${evText}</td>
+                        <td class="px-4 py-4 font-mono font-bold ${classes.yieldClass} text-right">
+                            ${formatPct(r.MonthlyYieldPct)}
+                            <span class="ml-1 text-xs text-gray-500">${classes.yieldCue}</span>
+                        </td>
+                        <td class="px-4 py-4 font-mono ${classes.otmClass} text-right">${formatPct(r.OTMPct)}</td>
+                        <td class="px-4 py-4 font-mono ${classes.deltaClass} text-right">${formatFixed(r.Delta, 3)}</td>
+                        <td class="px-4 py-4 font-mono ${popClass} text-right">${popText}</td>
+                        <td class="px-4 py-4 font-mono ${classes.spreadClass} text-right">${formatPct(r.SpreadPct)}</td>
+                        <td class="px-4 py-4 text-gray-600 text-right">${r.OpenInterest ?? 'N/A'}</td>
+                        <td class="px-4 py-4 font-mono text-right ${classes.ivhvClass}">${formatFixed(r.IVHVPercentile, 2)}</td>
+                        <td class="px-4 py-4 font-mono text-right ${classes.rsiClass}">${formatFixed(r.RSI, 1)}</td>
+                        <td class="px-4 py-4 font-mono text-right ${classes.adxClass}">${formatFixed(r.ADX, 1)}</td>
+                        <td class="px-4 py-4 font-mono text-right ${classes.diffClass}">${formatFixed(r.DiffPct, 1, '%')}</td>
+                        <td class="px-4 py-4 font-mono font-semibold ${classes.scoreClass} text-right">${formatFixed(r.Score, 2)}</td>
+                        <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.NetPremium)}</td>
+                        <td class="px-4 py-4 font-mono text-right ${classes.ivRankClass}">${formatNumberFixed(r.IVRank, 2)}</td>
+                        <td class="px-4 py-4 font-mono text-right ${classes.vrpClass}">${formatNumberFixed(r.VRPRatio, 2)}</td>
+                        <td class="px-4 py-4 font-mono text-right text-gray-600">${formatNumberFixed(r.SigmaDistance, 2)}</td>
+                        <td class="px-4 py-4 font-mono text-right ${classes.creditRiskClass}">${formatNumberFixed(r.CreditRiskRatio, 2)}</td>
+                    </tr>
+                `;
+            };
+
+            const renderThresholdLegend = thresholds => {
+                document.getElementById('thresholdLegend').innerHTML = `
+                    <span class="font-semibold text-gray-700">Legend:</span>
+                    <span><span class="text-emerald-700">Green</span> = meets target</span>
+                    <span><span class="text-amber-700">Amber</span> = near target</span>
+                    <span><span class="text-red-700">Red</span> = below target</span>
+                    <span class="text-gray-500">Yield target: ${thresholds.targetMonthlyYield.toFixed(2)}%</span>
+                    <span class="text-gray-500">Max spread: ${thresholds.maxSpreadPct.toFixed(2)}%</span>
+                `;
+            };
+
+            const renderSummaryCards = data => {
+                const summaryDiv = document.getElementById('summary');
+                const cards = [
+                    { label: 'Analyzed', value: data.total_tickers_analyzed, color: 'blue' },
+                    { label: 'Phase 1 Passed', value: data.candidates_after_phase1, color: 'indigo' },
+                    { label: 'Passed All', value: data.passed_all_criteria, color: 'green' },
+                    { label: 'Near Misses', value: data.near_misses, color: 'amber' }
+                ];
+                const cardColorClass = {
+                    blue: 'text-blue-500',
+                    indigo: 'text-indigo-500',
+                    green: 'text-green-500',
+                    amber: 'text-amber-500'
+                };
+
+                summaryDiv.innerHTML = cards.map(card => `
+                    <div class="bg-white p-2.5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
+                        <p class="text-xs font-bold uppercase tracking-wider ${cardColorClass[card.color] || 'text-gray-400'}">${card.label}</p>
+                        <p class="text-xl font-black text-gray-800 mt-0.5">${card.value.toLocaleString()}</p>
+                    </div>
+                `).join('');
+            };
+
+            const formatActiveFilterCount = active => {
+                if (active === 0) {
+                    return 'No filters';
+                }
+                const plural = active > 1 ? 's' : '';
+                return `${active} active filter${plural}`;
+            };
+
+            const passesQuickFilters = (rowData, passOnly, minDelta, maxDelta) => {
+                const statusText = (rowData[2] || '').toUpperCase();
+                const deltaText = (rowData[13] || '').trim();
+                const deltaValue = deltaText === 'N/A' || deltaText === '' ? null : Number(deltaText);
+
+                if (passOnly && !statusText.includes('PASS')) {
+                    return false;
+                }
+                if (deltaValue == null || Number.isNaN(deltaValue) || deltaValue < minDelta || deltaValue > maxDelta) {
+                    return false;
+                }
+
+                return true;
+            };
+
+            const setupQuickFilters = (table, data) => {
+                const passOnlyInput = document.getElementById('filterPassOnly');
+                const deltaSliderMin = document.getElementById('deltaSliderMin');
+                const deltaSliderMax = document.getElementById('deltaSliderMax');
+                const deltaRangeFill = document.getElementById('deltaRangeFill');
+                const deltaLabelMin = document.getElementById('deltaLabelMin');
+                const deltaLabelMax = document.getElementById('deltaLabelMax');
+                const resetFiltersBtn = document.getElementById('resetFilters');
+                const activeFilterCount = document.getElementById('activeFilterCount');
+
+                // Compute delta range from data
+                const allDeltas = data.results.map(r => r.Delta).filter(d => d != null && !Number.isNaN(Number(d)));
+                const globalDeltaMin = allDeltas.length > 0 ? Math.min(...allDeltas) : -1;
+                const globalDeltaMax = allDeltas.length > 0 ? Math.max(...allDeltas) : 0;
+
+                deltaSliderMin.min = globalDeltaMin.toFixed(3);
+                deltaSliderMin.max = globalDeltaMax.toFixed(3);
+                deltaSliderMin.step = '0.01';
+                deltaSliderMin.value = globalDeltaMin.toFixed(3);
+                deltaSliderMax.min = globalDeltaMin.toFixed(3);
+                deltaSliderMax.max = globalDeltaMax.toFixed(3);
+                deltaSliderMax.step = '0.01';
+                deltaSliderMax.value = globalDeltaMax.toFixed(3);
+
+                const updateDeltaFill = () => {
+                    const min = Number(deltaSliderMin.min);
+                    const max = Number(deltaSliderMin.max);
+                    const valMin = Number(deltaSliderMin.value);
+                    const valMax = Number(deltaSliderMax.value);
+                    const range = max - min || 1;
+                    deltaRangeFill.style.left = ((valMin - min) / range * 100) + '%';
+                    deltaRangeFill.style.width = ((valMax - valMin) / range * 100) + '%';
+                    deltaLabelMin.textContent = valMin.toFixed(2);
+                    deltaLabelMax.textContent = valMax.toFixed(2);
+                };
+
+                updateDeltaFill();
+
+                const updateActiveFilterCount = () => {
+                    const isDeltaFiltered = Number(deltaSliderMin.value) > globalDeltaMin ||
+                                            Number(deltaSliderMax.value) < globalDeltaMax;
+                    const active = [
+                        passOnlyInput.checked,
+                        isDeltaFiltered
+                    ].filter(Boolean).length;
+
+                    activeFilterCount.innerText = formatActiveFilterCount(active);
+                };
+
+                const redrawTable = () => {
+                    updateActiveFilterCount();
+                    table.draw();
+                };
+
+                const debouncedRedraw = debounce(redrawTable, 180);
+
+                $.fn.dataTable.ext.search.push((settings, rowData) => settings.nTable.id !== 'resultsTable' || passesQuickFilters(
+                    rowData,
+                    passOnlyInput.checked,
+                    Number(deltaSliderMin.value),
+                    Number(deltaSliderMax.value)
+                ));
+
+                passOnlyInput.addEventListener('change', redrawTable);
+                deltaSliderMin.addEventListener('pointerdown', () => { deltaSliderMin.style.zIndex = 5; deltaSliderMax.style.zIndex = 3; });
+                deltaSliderMax.addEventListener('pointerdown', () => { deltaSliderMax.style.zIndex = 5; deltaSliderMin.style.zIndex = 3; });
+                deltaSliderMin.addEventListener('input', () => {
+                    if (Number(deltaSliderMin.value) > Number(deltaSliderMax.value)) {
+                        deltaSliderMin.value = deltaSliderMax.value;
+                    }
+                    updateDeltaFill();
+                    debouncedRedraw();
+                });
+                deltaSliderMax.addEventListener('input', () => {
+                    if (Number(deltaSliderMax.value) < Number(deltaSliderMin.value)) {
+                        deltaSliderMax.value = deltaSliderMin.value;
+                    }
+                    updateDeltaFill();
+                    debouncedRedraw();
+                });
+                deltaSliderMin.addEventListener('change', redrawTable);
+                deltaSliderMax.addEventListener('change', redrawTable);
+
+                resetFiltersBtn.addEventListener('click', () => {
+                    passOnlyInput.checked = false;
+                    deltaSliderMin.value = deltaSliderMin.min;
+                    deltaSliderMax.value = deltaSliderMax.max;
+                    updateDeltaFill();
+                    redrawTable();
+                });
+
+                updateActiveFilterCount();
+            };
+
+            const renderDashboardData = (data, config) => {
+                activeDashboardData = data;
+                const thresholds = getDashboardThresholds(config);
+
+                // Update Last Updated
+                const date = new Date(data.timestamp);
+                document.getElementById('last-updated').innerText = Number.isNaN(date.getTime())
+                    ? 'Last analyzed: timestamp unavailable'
+                    : `Last analyzed: ${date.toLocaleString()}`;
+
+                renderThresholdLegend(thresholds);
+                renderSummaryCards(data);
+                renderPortfolio(data.portfolio);
+
+                // Populate Table
+                document.getElementById('tableBody').innerHTML = data.results
+                    .map((r, idx) => buildResultRow(r, idx, thresholds))
+                    .join('');
+
+                // Initialize DataTable
+                const table = $('#resultsTable').DataTable({
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+                    pageLength: -1,
+                    order: [[2, 'asc'], [21, 'desc'], [11, 'desc']],
+                    responsive: true,
+                    language: {
+                        searchPlaceholder: "Search tickers...",
+                        search: ""
+                    }
+                });
+                dataTableInstance = table;
+                applyColumnWidthOverrides();
+                attachColumnResizeHandles();
+
+                const tableToolbar = document.getElementById('tableToolbar');
+                const dataTableWrapper = document.getElementById('resultsTable_wrapper');
+                const dataTableLength = dataTableWrapper.querySelector('.dataTables_length');
+                const dataTableFilter = dataTableWrapper.querySelector('.dataTables_filter');
+
+                tableToolbar.appendChild(dataTableLength);
+                tableToolbar.appendChild(dataTableFilter);
+
+                setupQuickFilters(table, data);
+            };
+
+            // DataTables pins a pixel width on the table when columns are re-measured; keep it fluid.
+            $('#resultsTable').on('column-sizing.dt', function() {
+                this.style.width = '';
             });
 
             const loadDashboardData = () => {
@@ -1805,418 +2328,9 @@
                 .then(([resultsResponse, configResponse]) => {
                     if (!resultsResponse.ok) throw new Error(`Could not load ${resultsFile}`);
                     if (!configResponse.ok) throw new Error('Could not load config');
-                    return Promise.all([resultsResponse.json(), configResponse.text().then(t => jsyaml.load(t))]);
+                    return Promise.all([resultsResponse.json(), configResponse.text()]);
                 })
-                .then(([data, config]) => {
-                    activeDashboardData = data;
-
-                    const targetMonthlyYield = Number(config.TARGET_MONTHLY_YIELD_PCT ?? 1.0);
-                    const minAbsDelta = Number(config.MIN_ABS_DELTA ?? 0.0);
-                    const maxAbsDelta = Number(config.MAX_ABS_DELTA ?? 0.3);
-                    const minDte = Number(config.MIN_DTE ?? 7);
-                    const maxDte = Number(config.MAX_DTE ?? 60);
-                    const minOtmPct = Number(config.MIN_OTM_PCT ?? 0.0);
-                    const maxSpreadPct = Number(config.MAX_SPREAD_PCT ?? 20.0);
-                    const scoreHighThreshold = 75;
-                    const scoreMidThreshold = 55;
-
-                    // Update Last Updated
-                    const date = new Date(data.timestamp);
-                    document.getElementById('last-updated').innerText = Number.isNaN(date.getTime())
-                        ? 'Last analyzed: timestamp unavailable'
-                        : `Last analyzed: ${date.toLocaleString()}`;
-
-                    // Update legend with active thresholds
-                    document.getElementById('thresholdLegend').innerHTML = `
-                        <span class="font-semibold text-gray-700">Legend:</span>
-                        <span><span class="text-emerald-700">Green</span> = meets target</span>
-                        <span><span class="text-amber-700">Amber</span> = near target</span>
-                        <span><span class="text-red-700">Red</span> = below target</span>
-                        <span class="text-gray-500">Yield target: ${targetMonthlyYield.toFixed(2)}%</span>
-                        <span class="text-gray-500">Max spread: ${maxSpreadPct.toFixed(2)}%</span>
-                    `;
-
-                    // Update Summary
-                    const summaryDiv = document.getElementById('summary');
-                    const cards = [
-                        { label: 'Analyzed', value: data.total_tickers_analyzed, color: 'blue' },
-                        { label: 'Phase 1 Passed', value: data.candidates_after_phase1, color: 'indigo' },
-                        { label: 'Passed All', value: data.passed_all_criteria, color: 'green' },
-                        { label: 'Near Misses', value: data.near_misses, color: 'amber' }
-                    ];
-                    const cardColorClass = {
-                        blue: 'text-blue-500',
-                        indigo: 'text-indigo-500',
-                        green: 'text-green-500',
-                        amber: 'text-amber-500'
-                    };
-                    
-                    summaryDiv.innerHTML = cards.map(card => `
-                        <div class="bg-white p-2.5 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow">
-                            <p class="text-xs font-bold uppercase tracking-wider ${cardColorClass[card.color] || 'text-gray-400'}">${card.label}</p>
-                            <p class="text-xl font-black text-gray-800 mt-0.5">${card.value.toLocaleString()}</p>
-                        </div>
-                    `).join('');
-
-                    renderPortfolio(data.portfolio);
-
-                    // Populate Table
-                    const tableBody = document.getElementById('tableBody');
-                    tableBody.innerHTML = data.results.map((r, idx) => {
-                        const symbolRaw = r.Symbol != null ? String(r.Symbol) : '';
-                        const symbolDisplayRaw = symbolRaw.length > 9 ? `${symbolRaw.slice(0, 8)}...` : (symbolRaw || 'N/A');
-                        const symbolText = escapeHtml(symbolDisplayRaw);
-                        const symbolHref = `https://finance.yahoo.com/quote/${encodeURIComponent(symbolRaw)}/`;
-                        const nameText = escapeHtml(r.Name != null ? String(r.Name) : 'N/A');
-                        const expirationText = escapeHtml(r.Expiration != null ? String(r.Expiration) : 'N/A');
-                        const nextEarningsText = escapeHtml(r.NextEarnings != null ? String(r.NextEarnings) : 'N/A');
-
-                        const monthlyYield = r.MonthlyYieldPct;
-                        const spreadPct = r.SpreadPct;
-                        const score = r.Score;
-                        const absDelta = r.Delta != null ? Math.abs(r.Delta) : null;
-                        const dte = r.DTE != null ? Number(r.DTE) : null;
-                        const earningsBeforeExpiry = r.EarningsBeforeExpiry === true;
-
-                        const yieldClass = monthlyYield == null
-                            ? 'text-gray-500'
-                            : monthlyYield >= targetMonthlyYield
-                                ? 'text-emerald-600'
-                                : monthlyYield >= (targetMonthlyYield * 0.8)
-                                    ? 'text-amber-600'
-                                    : 'text-red-600';
-
-                        const spreadClass = spreadPct == null
-                            ? 'text-gray-500'
-                            : spreadPct <= maxSpreadPct
-                                ? 'text-emerald-600'
-                                : spreadPct <= (maxSpreadPct * 1.25)
-                                    ? 'text-amber-600'
-                                    : 'text-red-600';
-
-                        const otmClass = r.OTMPct == null
-                            ? 'text-gray-500'
-                            : r.OTMPct >= minOtmPct
-                                ? 'text-emerald-600'
-                                : r.OTMPct >= (minOtmPct * 0.8)
-                                    ? 'text-amber-600'
-                                    : 'text-red-600';
-
-                        const deltaClass = absDelta == null
-                            ? 'text-gray-500'
-                            : (absDelta >= minAbsDelta && absDelta <= maxAbsDelta)
-                                ? 'text-emerald-600'
-                                : (absDelta >= (minAbsDelta * 0.8) && absDelta <= (maxAbsDelta * 1.2))
-                                    ? 'text-amber-600'
-                                    : 'text-red-600';
-
-                        const scoreClass = score == null
-                            ? 'text-gray-500'
-                            : score >= scoreHighThreshold
-                                ? 'text-emerald-700'
-                                : score >= scoreMidThreshold
-                                    ? 'text-amber-700'
-                                    : 'text-red-700';
-
-                        const dteClass = dte == null || Number.isNaN(dte)
-                            ? 'text-gray-500'
-                            : (dte >= minDte && dte <= maxDte)
-                                ? 'text-emerald-600'
-                                : (dte >= (minDte * 0.8) && dte <= (maxDte * 1.2))
-                                    ? 'text-amber-600'
-                                    : 'text-red-600';
-
-                        const yieldCue = monthlyYield == null
-                            ? 'N/A'
-                            : monthlyYield >= targetMonthlyYield
-                                ? 'OK'
-                                : monthlyYield >= (targetMonthlyYield * 0.8)
-                                    ? 'Near'
-                                    : 'Low';
-
-                        const isPass = String(r.Status || '').toUpperCase() === 'PASS';
-                        const statusIcon = isPass ? '✓' : '!';
-                        const statusLabel = isPass ? 'PASS' : 'REVIEW';
-                        const earningsBadgeClass = r.EarningsBeforeExpiry == null
-                            ? 'bg-gray-100 text-gray-700'
-                            : earningsBeforeExpiry
-                                ? 'bg-red-100 text-red-800'
-                                : 'bg-emerald-100 text-emerald-800';
-                        const earningsBadgeText = r.EarningsBeforeExpiry == null
-                            ? 'N/A'
-                            : earningsBeforeExpiry
-                                ? (r.EarningsMovePct != null ? `Yes ±${Number(r.EarningsMovePct).toFixed(1)}%` : 'Yes')
-                                : 'No';
-
-                        const evVal = r.EV;
-                        let evClass = 'text-gray-500';
-                        let evText = 'N/A';
-                        if (evVal != null) {
-                            evClass = evVal > 0 ? 'text-emerald-600 font-semibold' : evVal < 0 ? 'text-red-600' : 'text-gray-700';
-                            const sign = evVal > 0 ? '+' : '';
-                            evText = `${sign}${evVal.toFixed(2)}`;
-                        }
-
-                        const popVal = r.PoP;
-                        let popClass = 'text-gray-500';
-                        let popText = 'N/A';
-                        if (popVal != null) {
-                            popClass = popVal >= 80 ? 'text-emerald-600 font-semibold' : popVal >= 70 ? 'text-amber-600' : 'text-red-600';
-                            popText = `${popVal.toFixed(1)}%`;
-                        }
-
-                        const ivRankVal = r.IVRank;
-                        const ivRankClass = ivRankVal == null
-                            ? 'text-gray-500'
-                            : ivRankVal >= 0.5
-                                ? 'text-emerald-600 font-semibold'
-                                : ivRankVal >= 0.3
-                                    ? 'text-amber-600'
-                                    : 'text-red-600';
-
-                        const vrpVal = r.VRPRatio;
-                        const vrpClass = vrpVal == null
-                            ? 'text-gray-500'
-                            : vrpVal >= 1.2
-                                ? 'text-emerald-600 font-semibold'
-                                : vrpVal >= 1.0
-                                    ? 'text-amber-600'
-                                    : 'text-red-600';
-
-                        const creditRiskVal = r.CreditRiskRatio;
-                        const creditRiskClass = creditRiskVal == null
-                            ? 'text-gray-500'
-                            : creditRiskVal >= 1.0
-                                ? 'text-emerald-600 font-semibold'
-                                : creditRiskVal >= 0.6
-                                    ? 'text-amber-600'
-                                    : 'text-red-600';
-
-                        const exDivDate = r.ExDividendDate;                        const exDivRisk = r.ExDivRisk || 'NONE';
-
-                        let exDivHtml = '';
-                        if (exDivDate) {
-                            if (exDivRisk === 'HIGH') {
-                                exDivHtml = `
-                                    <div class="mt-1 flex flex-col gap-0.5">
-                                        <span class="inline-flex items-center justify-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 border border-red-200 animate-pulse cursor-help" style="width: fit-content;" title="High early assignment risk! Dividend amount exceeds extrinsic value of the call option during its life.">
-                                            ⚠️ Early Assign Risk
-                                        </span>
-                                        <span class="text-[10px] text-gray-500 font-mono">Ex-Div: ${escapeHtml(exDivDate)}</span>
-                                    </div>
-                                `;
-                            } else if (exDivRisk === 'MEDIUM') {
-                                exDivHtml = `
-                                    <div class="mt-1 flex flex-col gap-0.5">
-                                        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-100 text-amber-800 border border-amber-200 cursor-help" style="width: fit-content;" title="Ex-dividend date occurs during contract life. Premium contains enough extrinsic value to reduce early exercise risk.">
-                                            Ex-Div Overlap
-                                        </span>
-                                        <span class="text-[10px] text-gray-500 font-mono">Ex-Div: ${escapeHtml(exDivDate)}</span>
-                                    </div>
-                                `;
-                            } else if (exDivRisk === 'DIVIDEND_DROP') {
-                                exDivHtml = `
-                                    <div class="mt-1 flex flex-col gap-0.5">
-                                        <span class="inline-flex items-center justify-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-orange-100 text-orange-800 border border-orange-200 cursor-help" style="width: fit-content;" title="Ex-dividend occurs during contract life. Underlying price will drop on ex-dividend date, increasing ITM risk for put sellers.">
-                                            ⚠️ Price Drop Risk
-                                        </span>
-                                        <span class="text-[10px] text-gray-500 font-mono">Ex-Div: ${escapeHtml(exDivDate)}</span>
-                                    </div>
-                                `;
-                            }
-                        }
-
-                        return `
-                            <tr data-index="${idx}" class="cursor-pointer hover:bg-opacity-50">
-                                <td class="px-4 py-4 font-bold text-blue-600 font-mono" title="${escapeHtml(symbolRaw || 'N/A')}">
-                                    <div class="inline-flex items-center gap-1.5 whitespace-nowrap">
-                                        <a href="${symbolHref}" target="_blank" rel="noopener noreferrer" class="shrink-0 hover:underline inline-block w-16 whitespace-nowrap">${symbolText}</a>
-                                        <button type="button" class="option-chain-btn" data-index="${idx}" aria-label="View option chain for ${escapeHtml(symbolRaw)}" title="View option chain for ${escapeHtml(symbolRaw)}">⌥</button>
-                                    </div>
-                                </td>
-                                <td class="px-4 py-4 text-gray-600 max-w-xs truncate" title="${nameText}">${nameText}</td>
-                                <td class="px-4 py-4" data-order="${isPass ? 0 : 1}">
-                                    <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium ${isPass ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'}">
-                                        <span aria-hidden="true">${statusIcon}</span>${statusLabel}
-                                    </span>
-                                </td>
-                                <td class="px-4 py-4 font-mono text-gray-700 font-medium text-right">${formatMoney(r.Price)}</td>
-                                <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.Strike)}</td>
-                                <td class="px-4 py-4 text-gray-600">
-                                    <div class="font-semibold font-mono">${expirationText}</div>
-                                    ${exDivHtml}
-                                </td>
-                                <td class="px-4 py-4 text-gray-600">${nextEarningsText}</td>
-                                <td class="px-4 py-4 text-center" data-order="${earningsBeforeExpiry ? 1 : 0}">
-                                    <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${earningsBadgeClass}">${earningsBadgeText}</span>
-                                </td>
-                                <td class="px-4 py-4 ${dteClass} text-right">${r.DTE != null ? r.DTE : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.Premium)}</td>
-                                <td class="px-4 py-4 font-mono ${evClass} text-right">${evText}</td>
-                                <td class="px-4 py-4 font-mono font-bold ${yieldClass} text-right">
-                                    ${formatPct(r.MonthlyYieldPct)}
-                                    <span class="ml-1 text-xs text-gray-500">${yieldCue}</span>
-                                </td>
-                                <td class="px-4 py-4 font-mono ${otmClass} text-right">${formatPct(r.OTMPct)}</td>
-                                <td class="px-4 py-4 font-mono ${deltaClass} text-right">${r.Delta != null ? r.Delta.toFixed(3) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono ${popClass} text-right">${popText}</td>
-                                <td class="px-4 py-4 font-mono ${spreadClass} text-right">${formatPct(r.SpreadPct)}</td>
-                                <td class="px-4 py-4 text-gray-600 text-right">${r.OpenInterest != null ? r.OpenInterest : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-right ${r.IVHVPercentile != null && r.IVHVPercentile >= 0.5 ? 'text-emerald-600' : r.IVHVPercentile != null && r.IVHVPercentile >= 0.3 ? 'text-amber-600' : r.IVHVPercentile != null ? 'text-red-600' : 'text-gray-500'}">${r.IVHVPercentile != null ? r.IVHVPercentile.toFixed(2) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-right ${r.RSI != null && r.RSI < 35 ? 'text-red-600' : r.RSI != null && r.RSI > 65 ? 'text-amber-600' : 'text-gray-600'}">${r.RSI != null ? r.RSI.toFixed(1) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-right ${r.ADX != null && r.ADX > 25 ? 'text-amber-600 font-semibold' : 'text-gray-600'}">${r.ADX != null ? r.ADX.toFixed(1) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-right ${r.DiffPct != null && r.DiffPct < -5 ? 'text-red-600' : r.DiffPct != null && r.DiffPct > 5 ? 'text-emerald-600' : 'text-gray-600'}">${r.DiffPct != null ? r.DiffPct.toFixed(1) + '%' : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono font-semibold ${scoreClass} text-right">${r.Score != null ? r.Score.toFixed(2) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-gray-700 text-right">${formatMoney(r.NetPremium)}</td>
-                                <td class="px-4 py-4 font-mono text-right ${ivRankClass}">${r.IVRank != null ? Number(r.IVRank).toFixed(2) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-right ${vrpClass}">${r.VRPRatio != null ? Number(r.VRPRatio).toFixed(2) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-right text-gray-600">${r.SigmaDistance != null ? Number(r.SigmaDistance).toFixed(2) : 'N/A'}</td>
-                                <td class="px-4 py-4 font-mono text-right ${creditRiskClass}">${r.CreditRiskRatio != null ? Number(r.CreditRiskRatio).toFixed(2) : 'N/A'}</td>
-                            </tr>
-                        `;
-                    }).join('');
-
-                    // Initialize DataTable
-                    const table = $('#resultsTable').DataTable({
-                        lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
-                        pageLength: -1,
-                        order: [[2, 'asc'], [21, 'desc'], [11, 'desc']],
-                        responsive: true,
-                        language: {
-                            searchPlaceholder: "Search tickers...",
-                            search: ""
-                        }
-                    });
-                    dataTableInstance = table;
-                    applyColumnWidthOverrides();
-                    attachColumnResizeHandles();
-                    
-                    const tableToolbar = document.getElementById('tableToolbar');
-                    const dataTableWrapper = document.getElementById('resultsTable_wrapper');
-                    const dataTableLength = dataTableWrapper.querySelector('.dataTables_length');
-                    const dataTableFilter = dataTableWrapper.querySelector('.dataTables_filter');
-
-                    tableToolbar.appendChild(dataTableLength);
-                    tableToolbar.appendChild(dataTableFilter);
-
-                    // Quick filters
-                    const passOnlyInput = document.getElementById('filterPassOnly');
-                    const deltaSliderMin = document.getElementById('deltaSliderMin');
-                    const deltaSliderMax = document.getElementById('deltaSliderMax');
-                    const deltaRangeFill = document.getElementById('deltaRangeFill');
-                    const deltaLabelMin = document.getElementById('deltaLabelMin');
-                    const deltaLabelMax = document.getElementById('deltaLabelMax');
-                    const resetFiltersBtn = document.getElementById('resetFilters');
-                    const activeFilterCount = document.getElementById('activeFilterCount');
-
-                    // Compute delta range from data
-                    const allDeltas = data.results.map(r => r.Delta).filter(d => d != null && !Number.isNaN(Number(d)));
-                    const globalDeltaMin = allDeltas.length > 0 ? Math.min(...allDeltas) : -1;
-                    const globalDeltaMax = allDeltas.length > 0 ? Math.max(...allDeltas) : 0;
-
-                    deltaSliderMin.min = globalDeltaMin.toFixed(3);
-                    deltaSliderMin.max = globalDeltaMax.toFixed(3);
-                    deltaSliderMin.step = '0.01';
-                    deltaSliderMin.value = globalDeltaMin.toFixed(3);
-                    deltaSliderMax.min = globalDeltaMin.toFixed(3);
-                    deltaSliderMax.max = globalDeltaMax.toFixed(3);
-                    deltaSliderMax.step = '0.01';
-                    deltaSliderMax.value = globalDeltaMax.toFixed(3);
-
-                    const updateDeltaFill = () => {
-                        const min = Number(deltaSliderMin.min);
-                        const max = Number(deltaSliderMin.max);
-                        const valMin = Number(deltaSliderMin.value);
-                        const valMax = Number(deltaSliderMax.value);
-                        const range = max - min || 1;
-                        deltaRangeFill.style.left = ((valMin - min) / range * 100) + '%';
-                        deltaRangeFill.style.width = ((valMax - valMin) / range * 100) + '%';
-                        deltaLabelMin.textContent = valMin.toFixed(2);
-                        deltaLabelMax.textContent = valMax.toFixed(2);
-                    };
-
-                    updateDeltaFill();
-
-                    const updateActiveFilterCount = () => {
-                        const isDeltaFiltered = Number(deltaSliderMin.value) > globalDeltaMin ||
-                                                Number(deltaSliderMax.value) < globalDeltaMax;
-                        const active = [
-                            passOnlyInput.checked,
-                            isDeltaFiltered
-                        ].filter(Boolean).length;
-
-                        activeFilterCount.innerText = active === 0 ? 'No filters' : `${active} active filter${active > 1 ? 's' : ''}`;
-                    };
-
-                    const debounce = (fn, wait = 200) => {
-                        let timeoutId;
-                        return (...args) => {
-                            clearTimeout(timeoutId);
-                            timeoutId = setTimeout(() => fn(...args), wait);
-                        };
-                    };
-
-                    const redrawTable = () => {
-                        updateActiveFilterCount();
-                        table.draw();
-                    };
-
-                    const debouncedRedraw = debounce(redrawTable, 180);
-
-                    $.fn.dataTable.ext.search.push(function(settings, rowData) {
-                        if (settings.nTable.id !== 'resultsTable') {
-                            return true;
-                        }
-
-                        const passOnly = passOnlyInput.checked;
-                        const minDelta = Number(deltaSliderMin.value);
-                        const maxDelta = Number(deltaSliderMax.value);
-
-                        const statusText = (rowData[2] || '').toUpperCase();
-                        const deltaText = (rowData[13] || '').trim();
-                        const deltaValue = deltaText === 'N/A' || deltaText === '' ? null : Number(deltaText);
-
-                        if (passOnly && !statusText.includes('PASS')) {
-                            return false;
-                        }
-                        if (deltaValue == null || Number.isNaN(deltaValue) || deltaValue < minDelta || deltaValue > maxDelta) {
-                            return false;
-                        }
-
-                        return true;
-                    });
-
-                    passOnlyInput.addEventListener('change', redrawTable);
-                    deltaSliderMin.addEventListener('pointerdown', () => { deltaSliderMin.style.zIndex = 5; deltaSliderMax.style.zIndex = 3; });
-                    deltaSliderMax.addEventListener('pointerdown', () => { deltaSliderMax.style.zIndex = 5; deltaSliderMin.style.zIndex = 3; });
-                    deltaSliderMin.addEventListener('input', () => {
-                        if (Number(deltaSliderMin.value) > Number(deltaSliderMax.value)) {
-                            deltaSliderMin.value = deltaSliderMax.value;
-                        }
-                        updateDeltaFill();
-                        debouncedRedraw();
-                    });
-                    deltaSliderMax.addEventListener('input', () => {
-                        if (Number(deltaSliderMax.value) < Number(deltaSliderMin.value)) {
-                            deltaSliderMax.value = deltaSliderMin.value;
-                        }
-                        updateDeltaFill();
-                        debouncedRedraw();
-                    });
-                    deltaSliderMin.addEventListener('change', redrawTable);
-                    deltaSliderMax.addEventListener('change', redrawTable);
-
-                    resetFiltersBtn.addEventListener('click', () => {
-                        passOnlyInput.checked = false;
-                        deltaSliderMin.value = deltaSliderMin.min;
-                        deltaSliderMax.value = deltaSliderMax.max;
-                        updateDeltaFill();
-                        redrawTable();
-                    });
-
-                    updateActiveFilterCount();
-
-                })
+                .then(([data, configText]) => renderDashboardData(data, jsyaml.load(configText)))
                 .catch(error => {
                     console.error('Error loading JSON:', error);
                     document.getElementById('summary').innerHTML = `
@@ -2229,6 +2343,13 @@
             };
 
             // Helper functions for expandable rows
+            const getThetaZoneLabel = dte => {
+                if (dte >= 30 && dte <= 50) {
+                    return 'OPTIMAL';
+                }
+                return dte < 30 ? 'High Gamma Risk' : 'Slow Decay';
+            };
+
             const formatRowDetails = (r, allResults) => {
                 const escapedSymbol = escapeHtml(r.Symbol || '');
                 const escapedStrike = String(r.Strike).replace('.', '_');
@@ -2278,6 +2399,8 @@
                 const maxLossText = currentOptionType === 'call' 
                     ? 'Unlimited (Naked) / Bounded by Stock' 
                     : `$${((Number(r.Strike) - Number(r.Premium)) * 100).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+                const thetaZoneClass = r.DTE >= 30 && r.DTE <= 50 ? 'text-emerald-600' : 'text-gray-500';
+                const thetaZoneLabel = getThetaZoneLabel(r.DTE);
 
                 return `
                     <tr class="details-tr">
@@ -2325,8 +2448,8 @@
                                             </div>
                                             <div class="details-text-row">
                                                 <span class="text-gray-500">Theta Zone (30-45d Sweetspot)</span>
-                                                <span class="details-text-val font-bold ${r.DTE >= 30 && r.DTE <= 50 ? 'text-emerald-600' : 'text-gray-500'}">
-                                                    ${r.DTE >= 30 && r.DTE <= 50 ? 'OPTIMAL' : r.DTE < 30 ? 'High Gamma Risk' : 'Slow Decay'}
+                                                <span class="details-text-val font-bold ${thetaZoneClass}">
+                                                    ${thetaZoneLabel}
                                                 </span>
                                             </div>
                                         </div>
@@ -2347,6 +2470,38 @@
                         </td>
                     </tr>
                 `;
+            };
+
+            const getPayoffPl = (p, strike, premium, isCall) => {
+                if (isCall) {
+                    return p <= strike ? premium : premium - (p - strike);
+                }
+                return p >= strike ? premium : premium - (strike - p);
+            };
+
+            const getPayoffStrokeColor = (isCall, price, breakEven) => {
+                const isLosing = isCall ? price > breakEven : price < breakEven;
+                return isLosing ? '#f85149' : '#3fb950';
+            };
+
+            const buildSvgPath = points => points.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
+
+            const buildSdBandHtml = (r, price, getX, padding, width, height) => {
+                const iv = Number(r.ImpliedVolatility);
+                const dte = Number(r.DTE);
+                if (!iv || !dte) {
+                    return '';
+                }
+                const t = dte / 365.0;
+                const sd = price * iv * Math.sqrt(t);
+                const sdMin = price - sd;
+                const sdMax = price + sd;
+                const xSdMin = clamp(getX(sdMin), padding.left, width - padding.right);
+                const xSdMax = clamp(getX(sdMax), padding.left, width - padding.right);
+                return `
+                        <rect x="${xSdMin.toFixed(1)}" y="${padding.top}" width="${(xSdMax - xSdMin).toFixed(1)}" height="${height - padding.top - padding.bottom}" 
+                              fill="url(#sd-gradient)" opacity="0.1" />
+                    `;
             };
 
             const renderPayoffChart = (containerId, r) => {
@@ -2382,42 +2537,25 @@
                 const steps = 100;
                 for (let i = 0; i <= steps; i++) {
                     const p = minPrice + (i / steps) * priceRange;
-                    let pl = 0;
-                    if (isCall) {
-                        pl = p <= strike ? premium : premium - (p - strike);
-                    } else {
-                        pl = p >= strike ? premium : premium - (strike - p);
-                    }
+                    const pl = getPayoffPl(p, strike, premium, isCall);
                     points.push({ x: getX(p), y: getY(pl) });
                 }
 
                 // SVG path string
-                const pathD = points.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
+                const pathD = buildSvgPath(points);
 
                 const zeroY = getY(0);
                 const zeroLineY = clamp(zeroY, padding.top, height - padding.bottom);
 
                 // Create SVG Elements
-                const isDark = document.body.getAttribute('data-theme') === 'dark';
+                const isDark = document.body.dataset.theme === 'dark';
                 const textStyle = `font-family: system-ui, sans-serif; font-size: 9px; fill: ${isDark ? '#8b949e' : '#5f6f84'}; font-weight: 600;`;
                 const gridStroke = isDark ? '#30363d' : '#dbe4f0';
+                const axisStroke = isDark ? '#30363d' : '#c5d1e0';
+                const payoffStroke = getPayoffStrokeColor(isCall, price, breakEven);
 
                 // 1-SD Shaded Band (based on IV if available)
-                let sdBandHtml = '';
-                const iv = Number(r.ImpliedVolatility);
-                const dte = Number(r.DTE);
-                if (iv && dte) {
-                    const t = dte / 365.0;
-                    const sd = price * iv * Math.sqrt(t);
-                    const sdMin = price - sd;
-                    const sdMax = price + sd;
-                    const xSdMin = clamp(getX(sdMin), padding.left, width - padding.right);
-                    const xSdMax = clamp(getX(sdMax), padding.left, width - padding.right);
-                    sdBandHtml = `
-                        <rect x="${xSdMin.toFixed(1)}" y="${padding.top}" width="${(xSdMax - xSdMin).toFixed(1)}" height="${height - padding.top - padding.bottom}" 
-                              fill="url(#sd-gradient)" opacity="0.1" />
-                    `;
-                }
+                const sdBandHtml = buildSdBandHtml(r, price, getX, padding, width, height);
 
                 container.innerHTML = `
                     <svg width="100%" height="100%" viewBox="0 0 ${width} ${height}">
@@ -2441,7 +2579,7 @@
                         <line x1="${getX(price)}" y1="${padding.top}" x2="${getX(price)}" y2="${height - padding.bottom}" stroke="#58a6ff" stroke-width="1" opacity="0.5" />
 
                         <!-- P/L Payoff Line -->
-                        <path d="${pathD}" fill="none" stroke="${isCall ? (price > breakEven ? '#f85149' : '#3fb950') : (price < breakEven ? '#f85149' : '#3fb950')}" stroke-width="2.2" stroke-linecap="round" />
+                        <path d="${pathD}" fill="none" stroke="${payoffStroke}" stroke-width="2.2" stroke-linecap="round" />
 
                         <!-- Vertical labels -->
                         <text x="${getX(strike)}" y="${height - padding.bottom + 12}" style="${textStyle} text-anchor: middle;">Strike ($${strike.toFixed(0)})</text>
@@ -2454,8 +2592,8 @@
                         <text x="${padding.left - 6}" y="${getY(minPL * 0.6) + 3}" style="${textStyle} text-anchor: end; fill: #f85149;">Loss</text>
 
                         <!-- Axes borders -->
-                        <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${height - padding.bottom}" stroke="${isDark ? '#30363d' : '#c5d1e0'}" stroke-width="1" />
-                        <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="${isDark ? '#30363d' : '#c5d1e0'}" stroke-width="1" />
+                        <line x1="${padding.left}" y1="${padding.top}" x2="${padding.left}" y2="${height - padding.bottom}" stroke="${axisStroke}" stroke-width="1" />
+                        <line x1="${padding.left}" y1="${height - padding.bottom}" x2="${width - padding.right}" y2="${height - padding.bottom}" stroke="${axisStroke}" stroke-width="1" />
                     </svg>
                 `;
             };
@@ -2482,7 +2620,7 @@
                     points.push({ x: getX(tDays), y: getY(val) });
                 }
 
-                const pathD = points.map((pt, i) => `${i === 0 ? 'M' : 'L'} ${pt.x.toFixed(1)} ${pt.y.toFixed(1)}`).join(' ');
+                const pathD = buildSvgPath(points);
                 const areaD = `${pathD} L ${getX(0).toFixed(1)} ${getY(0).toFixed(1)} L ${getX(dte).toFixed(1)} ${getY(0).toFixed(1)} Z`;
 
                 let sweetSpotHtml = '';
@@ -2497,7 +2635,7 @@
                     `;
                 }
 
-                const isDark = document.body.getAttribute('data-theme') === 'dark';
+                const isDark = document.body.dataset.theme === 'dark';
                 const textStyle = `font-family: system-ui, sans-serif; font-size: 9px; fill: ${isDark ? '#8b949e' : '#5f6f84'}; font-weight: 600;`;
                 const gridStroke = isDark ? '#30363d' : '#dbe4f0';
 

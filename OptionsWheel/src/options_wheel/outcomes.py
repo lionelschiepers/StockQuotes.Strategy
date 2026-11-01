@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 from datetime import datetime, timezone
 
@@ -76,8 +77,18 @@ ARCHIVED_FIELDS = (
 )
 
 
+def checked_option_type(option_type):
+    """Return ``option_type`` as a known literal; it names files and folders."""
+    if option_type == "put":
+        return "put"
+    if option_type == "call":
+        return "call"
+    raise ValueError(f"Unknown option type: {option_type!r}")
+
+
 def archive_scan(rows, option_type="put", scan_date=None, archive_dir=SCAN_ARCHIVE_DIR):
     """Persist a compact snapshot of one scan for later grading."""
+    option_type = checked_option_type(option_type)
     scan_date = scan_date or datetime.now(timezone.utc).strftime("%Y-%m-%d")
     directory = os.path.join(archive_dir, option_type)
     os.makedirs(directory, exist_ok=True)
@@ -137,7 +148,7 @@ def parse_splits(events):
             ratio = float(item.get("numerator")) / float(item.get("denominator"))
         except (TypeError, ValueError, ZeroDivisionError):
             continue
-        if ratio > 0 and ratio != 1.0:
+        if ratio > 0 and not math.isclose(ratio, 1.0):
             splits.append((str(item["date"])[:10], ratio))
     return splits
 
@@ -153,6 +164,16 @@ def split_factor(splits, scan_date):
 
 def _days_between(start, end):
     return (datetime.strptime(end, "%Y-%m-%d") - datetime.strptime(start, "%Y-%m-%d")).days
+
+
+def _exit_signal(price, credit, profit_target, stop_loss):
+    if price is None:
+        return None
+    if profit_target and price <= credit * (1.0 - profit_target):
+        return "target"
+    if stop_loss and price >= credit * (1.0 + stop_loss):
+        return "stop"
+    return None
 
 
 def _managed_exit(
@@ -179,13 +200,28 @@ def _managed_exit(
         price = black_scholes_price(
             spot, strike, implied_vol, t_years, risk_free_rate, option_type=option_type
         )
-        if price is None:
-            continue
-        if profit_target and price <= credit * (1.0 - profit_target):
-            return "target", day, price
-        if stop_loss and price >= credit * (1.0 + stop_loss):
-            return "stop", day, price
+        reason = _exit_signal(price, credit, profit_target, stop_loss)
+        if reason:
+            return reason, day, price
     return None
+
+
+def _settlement(option_type, strike, settle_price, path):
+    """``(intrinsic value at expiry, strike touched before expiry)``."""
+    if option_type == "call":
+        worst = max((close for _, close in path), default=None)
+        return max(settle_price - strike, 0.0), worst is not None and worst > strike
+    worst = min((close for _, close in path), default=None)
+    return max(strike - settle_price, 0.0), worst is not None and worst < strike
+
+
+def _round_per_contract(value):
+    return round(value * 100.0, 2) if value is not None else None
+
+
+def _collateral_per_share(row, strike, net_premium, option_type):
+    collateral_base = strike if option_type != "call" else row.get("Price") or strike
+    return max(collateral_base - net_premium, 0.01)
 
 
 def grade_trade(
@@ -216,15 +252,7 @@ def grade_trade(
     if not settled:
         return None
     settle_date, settle_price = settled[-1][0], settled[-1][1] * factor
-
-    if option_type == "call":
-        intrinsic = max(settle_price - strike, 0.0)
-        worst = max((close for _, close in path), default=None)
-        breached = worst is not None and worst > strike
-    else:
-        intrinsic = max(strike - settle_price, 0.0)
-        worst = min((close for _, close in path), default=None)
-        breached = worst is not None and worst < strike
+    intrinsic, breached = _settlement(option_type, strike, settle_price, path)
 
     pnl_per_share = net_premium - intrinsic
     exit_reason, exit_date, managed_pnl = "expiry", settle_date, pnl_per_share
@@ -250,10 +278,7 @@ def grade_trade(
             exit_reason, exit_date, buyback = managed
             managed_pnl = net_premium - buyback - exit_commission / 100.0
 
-    collateral = max(
-        (strike if option_type != "call" else row.get("Price") or strike) - net_premium,
-        0.01,
-    )
+    collateral = _collateral_per_share(row, strike, net_premium, option_type)
     dte = row.get("DTE") or 1
     ev = row.get("EV")
 
@@ -274,7 +299,7 @@ def grade_trade(
         "AnnualizedReturnPct": round(pnl_per_share / collateral * (365.0 / dte) * 100.0, 2),
         "ManagedExit": exit_reason,
         "ManagedExitDate": exit_date,
-        "ManagedPnLPerContract": round(managed_pnl * 100.0, 2) if managed_pnl is not None else None,
+        "ManagedPnLPerContract": _round_per_contract(managed_pnl),
         "Score": row.get("Score"),
         "Delta": row.get("Delta"),
         "IVRank": row.get("IVRank"),
@@ -282,7 +307,7 @@ def grade_trade(
         "SigmaDistance": row.get("SigmaDistance"),
         "PoP": row.get("PoP"),
         "EV": ev,
-        "ModelEVPerContract": round(ev * 100.0, 2) if ev is not None else None,
+        "ModelEVPerContract": _round_per_contract(ev),
         "EarningsBeforeExpiry": row.get("EarningsBeforeExpiry"),
         "NextEarnings": row.get("NextEarnings"),
         "EarningsMovePct": row.get("EarningsMovePct"),
@@ -411,6 +436,80 @@ def _load_previous(output_path):
         return {}
 
 
+def _previous_grades(output_path, regrade):
+    previous = {} if regrade else _load_previous(output_path)
+    if previous and previous.get("grader_version") != GRADER_VERSION:
+        print("Grading logic changed since the last run; regrading every trade.")
+        previous = {}
+    return previous
+
+
+def _is_expired(row, today):
+    expiration = row.get("Expiration")
+    if not expiration:
+        return False
+    try:
+        expiry_date = datetime.strptime(expiration, "%Y-%m-%d").date()
+    except ValueError:
+        return False
+    return expiry_date < today
+
+
+def _pending_trades(directory, known_keys, today):
+    """``[(scan_date, row), ...]`` of archived contracts expired but not graded."""
+    pending = []
+    for filename in sorted(os.listdir(directory)):
+        if not filename.endswith(".json"):
+            continue
+        with open(os.path.join(directory, filename), "r", encoding="utf-8") as f:
+            scan = json.load(f)
+        scan_date = scan.get("scan_date") or filename[:-5]
+        pending.extend(
+            (scan_date, row)
+            for row in scan.get("candidates", [])
+            if _is_expired(row, today) and _trade_key(scan_date, row) not in known_keys
+        )
+    return pending
+
+
+def _grade_pending(pending, today, option_type, fetch_history, profit_target, stop_loss):
+    by_symbol = {}
+    for scan_date, row in pending:
+        by_symbol.setdefault(row.get("Symbol"), []).append((scan_date, row))
+
+    graded = []
+    to_date = today.strftime("%Y-%m-%d")
+    for index, (symbol, items) in enumerate(sorted(by_symbol.items()), 1):
+        from_date = min(scan_date for scan_date, _ in items)
+        print(f"[{index}/{len(by_symbol)}] Grading {symbol:<10}", end="\r", flush=True)
+        bars, splits = fetch_history(symbol, from_date, to_date)
+        if not bars:
+            continue
+        for scan_date, row in items:
+            trade = grade_trade(
+                row,
+                scan_date,
+                bars,
+                option_type,
+                splits=splits,
+                profit_target=profit_target,
+                stop_loss=stop_loss,
+            )
+            if trade:
+                graded.append(trade)
+    return graded
+
+
+def _print_overall(overall):
+    print(
+        f"{overall['trades']} unique contracts | win rate {overall['win_rate_pct']}% "
+        f"(model PoP {overall['model_pop_pct']}%) | held P/L "
+        f"${overall['avg_pnl_per_contract']}/contract (model EV ${overall['model_ev_per_contract']}) | "
+        f"managed P/L ${overall['avg_managed_pnl_per_contract']}/contract "
+        f"({overall['managed_trades']} modeled)"
+    )
+
+
 def evaluate(
     option_type="put",
     archive_dir=SCAN_ARCHIVE_DIR,
@@ -421,6 +520,7 @@ def evaluate(
     fetch_history=None,
 ):
     """Grade every archived candidate whose expiry has passed."""
+    option_type = checked_option_type(option_type)
     fetch_history = fetch_history or _fetch_history
     directory = os.path.join(archive_dir, option_type)
     if not os.path.isdir(directory):
@@ -428,61 +528,17 @@ def evaluate(
         return None
 
     output_path = os.path.join(output_dir, f"outcomes_{option_type}.json")
-    previous = {} if regrade else _load_previous(output_path)
-    if previous and previous.get("grader_version") != GRADER_VERSION:
-        print("Grading logic changed since the last run; regrading every trade.")
-        previous = {}
-    graded = previous.get("trades", [])
+    graded = _previous_grades(output_path, regrade).get("trades", [])
     known_keys = {_trade_key(t["ScanDate"], t) for t in graded}
 
     today = datetime.now(timezone.utc).date()
-    pending = []
-    for filename in sorted(os.listdir(directory)):
-        if not filename.endswith(".json"):
-            continue
-        with open(os.path.join(directory, filename), "r", encoding="utf-8") as f:
-            scan = json.load(f)
-        scan_date = scan.get("scan_date") or filename[:-5]
-        for row in scan.get("candidates", []):
-            expiration = row.get("Expiration")
-            if not expiration:
-                continue
-            try:
-                expiry_date = datetime.strptime(expiration, "%Y-%m-%d").date()
-            except ValueError:
-                continue
-            if expiry_date >= today:
-                continue
-            if _trade_key(scan_date, row) in known_keys:
-                continue
-            pending.append((scan_date, row))
-
+    pending = _pending_trades(directory, known_keys, today)
     if not pending:
         print(f"No newly expired {option_type} candidates to grade.")
     else:
-        by_symbol = {}
-        for scan_date, row in pending:
-            by_symbol.setdefault(row.get("Symbol"), []).append((scan_date, row))
-
-        to_date = today.strftime("%Y-%m-%d")
-        for index, (symbol, items) in enumerate(sorted(by_symbol.items()), 1):
-            from_date = min(scan_date for scan_date, _ in items)
-            print(f"[{index}/{len(by_symbol)}] Grading {symbol:<10}", end="\r", flush=True)
-            bars, splits = fetch_history(symbol, from_date, to_date)
-            if not bars:
-                continue
-            for scan_date, row in items:
-                trade = grade_trade(
-                    row,
-                    scan_date,
-                    bars,
-                    option_type,
-                    splits=splits,
-                    profit_target=profit_target,
-                    stop_loss=stop_loss,
-                )
-                if trade:
-                    graded.append(trade)
+        graded.extend(
+            _grade_pending(pending, today, option_type, fetch_history, profit_target, stop_loss)
+        )
 
     graded.sort(key=lambda t: (t["Expiration"], t["Symbol"], t["ScanDate"]))
     payload = {
@@ -500,13 +556,7 @@ def evaluate(
 
     overall = payload["summary"].get("overall")
     if overall:
-        print(
-            f"{overall['trades']} unique contracts | win rate {overall['win_rate_pct']}% "
-            f"(model PoP {overall['model_pop_pct']}%) | held P/L "
-            f"${overall['avg_pnl_per_contract']}/contract (model EV ${overall['model_ev_per_contract']}) | "
-            f"managed P/L ${overall['avg_managed_pnl_per_contract']}/contract "
-            f"({overall['managed_trades']} modeled)"
-        )
+        _print_overall(overall)
     return payload
 
 

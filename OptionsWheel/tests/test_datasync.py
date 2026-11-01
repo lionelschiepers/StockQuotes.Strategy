@@ -1,12 +1,25 @@
 import json
 
-from options_wheel.datasync import sync
+import pytest
+
+from options_wheel.datasync import resolve_data_dir, sync
 from options_wheel.iv_history import IVHistoryStore
 
 
 def _write(path, payload):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def test_data_dir_must_stay_inside_the_workspace(tmp_path):
+    root = tmp_path / "workspace"
+    (root / "repo").mkdir(parents=True)
+    assert resolve_data_dir(str(root / "repo" / ".." / "ow-data"), root=str(root)) == str(
+        (root / "ow-data").resolve()
+    )
+    for escaping in (root / ".." / "elsewhere", root, tmp_path / "workspace-evil"):
+        with pytest.raises(ValueError):
+            resolve_data_dir(str(escaping), root=str(root))
 
 
 def test_iv_history_merge_keeps_existing_dates(tmp_path):

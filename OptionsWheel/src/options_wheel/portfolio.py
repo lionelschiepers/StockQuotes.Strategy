@@ -48,6 +48,61 @@ def contract_collateral(row, option_type="put"):
     return max((base - net_premium) * CONTRACT_MULTIPLIER, CONTRACT_MULTIPLIER)
 
 
+def _selection_block(
+    selected, used_symbols, sector_counts, symbol, sector, max_positions, max_per_sector
+):
+    """Constraint that rules out a new position before sizing it, if any."""
+    if max_positions and len(selected) >= max_positions:
+        return "position_cap"
+    if symbol in used_symbols:
+        return "duplicate_symbol"
+    if sector and max_per_sector and sector_counts.get(sector, 0) >= max_per_sector:
+        return "sector_cap"
+    return None
+
+
+def _exceeds_budget(collateral, total_collateral, budget, per_position_cap):
+    if per_position_cap and collateral > per_position_cap:
+        return True
+    return budget > 0 and total_collateral + collateral > budget
+
+
+def _position(row, symbol, sector, collateral, credit):
+    return {
+        "Symbol": symbol,
+        "Sector": sector,
+        "Strike": row.get("Strike"),
+        "Expiration": row.get("Expiration"),
+        "DTE": row.get("DTE"),
+        "NetPremium": row.get("NetPremium"),
+        "Collateral": round(collateral, 2),
+        "Credit": round(credit, 2),
+        "MonthlyYieldPct": row.get("MonthlyYieldPct"),
+        "PoP": row.get("PoP"),
+        "EV": row.get("EV"),
+        "Score": row.get("Score"),
+    }
+
+
+def _portfolio_limits(config):
+    """``(max_positions, max_per_sector, budget, max_pct, per_position_cap)``."""
+    max_positions = int(config.get("PORTFOLIO_MAX_POSITIONS", 10) or 0)
+    max_per_sector = int(config.get("PORTFOLIO_MAX_PER_SECTOR", 2) or 0)
+    budget = float(config.get("PORTFOLIO_COLLATERAL_BUDGET", 0.0) or 0.0)
+    max_pct = float(config.get("PORTFOLIO_MAX_PCT_PER_POSITION", 25.0) or 0.0)
+
+    per_position_cap = budget * (max_pct / 100.0) if budget > 0 and max_pct > 0 else None
+    return max_positions, max_per_sector, budget, max_pct, per_position_cap
+
+
+def _weighted_yield(selected, total_collateral):
+    if total_collateral > 0:
+        return sum(
+            (p["MonthlyYieldPct"] or 0.0) * p["Collateral"] for p in selected
+        ) / total_collateral
+    return None
+
+
 def build_portfolio(rows, config, option_type="put", sector_map=None):
     """Greedily pick the best-scoring contracts that satisfy the constraints.
 
@@ -55,12 +110,7 @@ def build_portfolio(rows, config, option_type="put", sector_map=None):
     the selected positions and the aggregate exposure.
     """
     sector_map = sector_map or {}
-    max_positions = int(config.get("PORTFOLIO_MAX_POSITIONS", 10) or 0)
-    max_per_sector = int(config.get("PORTFOLIO_MAX_PER_SECTOR", 2) or 0)
-    budget = float(config.get("PORTFOLIO_COLLATERAL_BUDGET", 0.0) or 0.0)
-    max_pct = float(config.get("PORTFOLIO_MAX_PCT_PER_POSITION", 25.0) or 0.0)
-
-    per_position_cap = budget * (max_pct / 100.0) if budget > 0 and max_pct > 0 else None
+    max_positions, max_per_sector, budget, max_pct, per_position_cap = _portfolio_limits(config)
 
     selected = []
     used_symbols = set()
@@ -70,27 +120,19 @@ def build_portfolio(rows, config, option_type="put", sector_map=None):
     skipped = {"duplicate_symbol": 0, "sector_cap": 0, "position_cap": 0, "budget": 0}
 
     for row in rows:
-        if max_positions and len(selected) >= max_positions:
-            skipped["position_cap"] += 1
-            continue
-
         symbol = row.get("Symbol")
-        if symbol in used_symbols:
-            skipped["duplicate_symbol"] += 1
-            continue
-
         sector = sector_map.get(str(symbol).upper())
-        if sector and max_per_sector and sector_counts.get(sector, 0) >= max_per_sector:
-            skipped["sector_cap"] += 1
+        block = _selection_block(
+            selected, used_symbols, sector_counts, symbol, sector, max_positions, max_per_sector
+        )
+        if block:
+            skipped[block] += 1
             continue
 
         collateral = contract_collateral(row, option_type)
         if collateral is None:
             continue
-        if per_position_cap and collateral > per_position_cap:
-            skipped["budget"] += 1
-            continue
-        if budget > 0 and total_collateral + collateral > budget:
+        if _exceeds_budget(collateral, total_collateral, budget, per_position_cap):
             skipped["budget"] += 1
             continue
 
@@ -100,29 +142,9 @@ def build_portfolio(rows, config, option_type="put", sector_map=None):
             sector_counts[sector] = sector_counts.get(sector, 0) + 1
         total_collateral += collateral
         total_credit += credit
+        selected.append(_position(row, symbol, sector, collateral, credit))
 
-        selected.append(
-            {
-                "Symbol": symbol,
-                "Sector": sector,
-                "Strike": row.get("Strike"),
-                "Expiration": row.get("Expiration"),
-                "DTE": row.get("DTE"),
-                "NetPremium": row.get("NetPremium"),
-                "Collateral": round(collateral, 2),
-                "Credit": round(credit, 2),
-                "MonthlyYieldPct": row.get("MonthlyYieldPct"),
-                "PoP": row.get("PoP"),
-                "EV": row.get("EV"),
-                "Score": row.get("Score"),
-            }
-        )
-
-    weighted_yield = None
-    if total_collateral > 0:
-        weighted_yield = sum(
-            (p["MonthlyYieldPct"] or 0.0) * p["Collateral"] for p in selected
-        ) / total_collateral
+    weighted_yield = _weighted_yield(selected, total_collateral)
 
     return {
         "positions": selected,

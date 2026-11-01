@@ -69,7 +69,7 @@ class NumpyEncoder(json.JSONEncoder):
 BATCH_SIZE = 50
 HIST_DAYS = 365
 DEFAULT_API_BASE = "https://stock-f5cmfcckdmdberev.northeurope-01.azurewebsites.net/api"
-#DEFAULT_API_BASE = "http://localhost:7071/api"
+FAILED_CRITERION = "Failed Criterion"
 
 
 def _default_endpoint(path_suffix):
@@ -214,30 +214,32 @@ def _shorten_response_text(text, max_len=240):
     return compact[: max_len - 3] + "..."
 
 
-def load_screening_config(defaults, option_type="put"):
-    cfg = dict(defaults)
+def _screening_config_path(option_type):
     default_calls_config = os.path.join(CONFIG_DIR, "screening_config_calls.yaml")
     default_puts_config = os.path.join(CONFIG_DIR, "screening_config_puts.yaml")
     if option_type == "call":
         config_path = os.environ.get("OPTIONS_SCREEN_CONFIG_CALLS", default_calls_config)
-        if not os.path.exists(config_path):
-            config_path = os.environ.get("OPTIONS_SCREEN_CONFIG", default_puts_config)
-    else:
-        config_path = os.environ.get("OPTIONS_SCREEN_CONFIG", default_puts_config)
+        if os.path.exists(config_path):
+            return config_path
+    return os.environ.get("OPTIONS_SCREEN_CONFIG", default_puts_config)
 
-    if os.path.exists(config_path):
-        try:
-            with open(config_path, "r", encoding="utf-8") as f:
-                file_cfg = yaml.safe_load(f)
-            if isinstance(file_cfg, dict):
-                for key, value in file_cfg.items():
-                    if key in cfg:
-                        cfg[key] = _coerce_config_value(cfg[key], value)
-                    else:
-                        print(f"Warning: ignoring unknown config key {key} in {config_path}")
-        except Exception as e:
-            print(f"Warning: could not load {config_path}: {e}")
 
+def _apply_config_file(cfg, config_path):
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            file_cfg = yaml.safe_load(f)
+        if not isinstance(file_cfg, dict):
+            return
+        for key, value in file_cfg.items():
+            if key in cfg:
+                cfg[key] = _coerce_config_value(cfg[key], value)
+            else:
+                print(f"Warning: ignoring unknown config key {key} in {config_path}")
+    except Exception as e:
+        print(f"Warning: could not load {config_path}: {e}")
+
+
+def _apply_env_overrides(cfg):
     for key in cfg:
         env_key = f"OW_{key}"
         raw_env = os.environ.get(env_key)
@@ -248,106 +250,84 @@ def load_screening_config(defaults, option_type="put"):
         except Exception as e:
             print(f"Warning: invalid env value for {env_key}: {e}")
 
+
+def load_screening_config(defaults, option_type="put"):
+    cfg = dict(defaults)
+    config_path = _screening_config_path(option_type)
+    if os.path.exists(config_path):
+        _apply_config_file(cfg, config_path)
+    _apply_env_overrides(cfg)
     return cfg
 
 
+# (key, minimum, maximum, minimum is exclusive, allowed range shown in the error).
+# ``None`` leaves that side unbounded; maximums are inclusive.
+SCREENING_CONFIG_RANGES = (
+    ("TARGET_MONTHLY_YIELD_PCT", 0, 20, True, "in (0, 20]"),
+    ("MAX_PRICE", 0, 10000, True, "in (0, 10000]"),
+    ("MIN_STOCK_AVG_VOLUME", 0, 1_000_000_000, False, "in [0, 1000000000]"),
+    ("MIN_MARKET_CAP", 0, 10_000_000_000_000, False, "in [0, 10000000000000]"),
+    ("MIN_PREMIUM", 0, 100, True, "in (0, 100]"),
+    ("MIN_DTE", 1, None, False, ">= 1"),
+    ("MAX_DTE", None, 3650, False, "<= 3650"),
+    ("MIN_OTM_PCT", 0, 50, False, "in [0, 50]"),
+    ("MIN_OPEN_INTEREST", 0, None, False, ">= 0"),
+    ("MIN_VOLUME", 0, None, False, ">= 0"),
+    ("MAX_SPREAD_PCT", 0, 100, True, "in (0, 100]"),
+    ("MIN_ABS_DELTA", 0, 1, False, "in [0, 1]"),
+    ("MAX_ABS_DELTA", 0, 1, False, "in [0, 1]"),
+    ("MAX_EXPIRATIONS_PER_SYMBOL", 1, 24, False, "in [1, 24]"),
+    ("MAX_CONTRACTS_PER_SYMBOL", 1, 50, False, "in [1, 50]"),
+    ("OPTIONS_REQUEST_TIMEOUT", 3, 120, False, "in [3, 120]"),
+    ("OPTIONS_MAX_RETRIES", 1, 20, False, "in [1, 20]"),
+    ("COMMISSION_PER_CONTRACT", 0, 25, False, "in [0, 25]"),
+    ("SLIPPAGE_PCT_OF_SPREAD", 0, 100, False, "in [0, 100]"),
+    ("MAX_SPREAD_ABS", 0, 25, True, "in (0, 25]"),
+    ("RISK_FREE_RATE", -0.05, 0.25, False, "in [-0.05, 0.25]"),
+    ("DIVIDEND_YIELD", 0, 0.25, False, "in [0, 0.25]"),
+    ("MIN_IV_RANK", 0, 1.0, False, "in [0, 1.0]"),
+    ("FORECAST_HV_WEIGHT", 0, 1, False, "in [0, 1]"),
+    ("FORECAST_IV_HAIRCUT", 0, 2, True, "in (0, 2]"),
+    ("REAL_WORLD_DRIFT", -0.5, 0.5, False, "in [-0.5, 0.5]"),
+    ("PORTFOLIO_MAX_POSITIONS", 0, 100, False, "in [0, 100]"),
+    ("PORTFOLIO_MAX_PER_SECTOR", 0, 100, False, "in [0, 100]"),
+    ("PORTFOLIO_COLLATERAL_BUDGET", 0, None, False, ">= 0"),
+    ("PORTFOLIO_MAX_PCT_PER_POSITION", 0, 100, False, "in [0, 100]"),
+)
+
+SCREENING_CONFIG_FLAGS = (
+    "FILTER_DOWNTRENDS",
+    "FILTER_UPTRENDS",
+    "EXCLUDE_EARNINGS_BEFORE_EXPIRY",
+)
+
+
+def _out_of_range(value, minimum, maximum, minimum_exclusive):
+    if minimum is not None and (value <= minimum if minimum_exclusive else value < minimum):
+        return True
+    return maximum is not None and value > maximum
+
+
 def validate_screening_config(cfg):
-    errors = []
+    errors = [
+        f"{key} must be {expected}."
+        for key, minimum, maximum, minimum_exclusive, expected in SCREENING_CONFIG_RANGES
+        if _out_of_range(cfg[key], minimum, maximum, minimum_exclusive)
+    ]
 
-    if cfg["TARGET_MONTHLY_YIELD_PCT"] <= 0 or cfg["TARGET_MONTHLY_YIELD_PCT"] > 20:
-        errors.append("TARGET_MONTHLY_YIELD_PCT must be in (0, 20].")
-
-    if cfg["MAX_PRICE"] <= 0 or cfg["MAX_PRICE"] > 10000:
-        errors.append("MAX_PRICE must be in (0, 10000].")
-
-    if cfg["MIN_STOCK_AVG_VOLUME"] < 0 or cfg["MIN_STOCK_AVG_VOLUME"] > 1_000_000_000:
-        errors.append("MIN_STOCK_AVG_VOLUME must be in [0, 1000000000].")
-
-    if cfg["MIN_MARKET_CAP"] < 0 or cfg["MIN_MARKET_CAP"] > 10_000_000_000_000:
-        errors.append("MIN_MARKET_CAP must be in [0, 10000000000000].")
-
-    if cfg["MIN_PREMIUM"] <= 0 or cfg["MIN_PREMIUM"] > 100:
-        errors.append("MIN_PREMIUM must be in (0, 100].")
-
-    if cfg["MIN_DTE"] < 1:
-        errors.append("MIN_DTE must be >= 1.")
     if cfg["MAX_DTE"] < cfg["MIN_DTE"]:
         errors.append("MAX_DTE must be >= MIN_DTE.")
-    if cfg["MAX_DTE"] > 3650:
-        errors.append("MAX_DTE must be <= 3650.")
-
-    if cfg["MIN_OTM_PCT"] < 0 or cfg["MIN_OTM_PCT"] > 50:
-        errors.append("MIN_OTM_PCT must be in [0, 50].")
-
-    if cfg["MIN_OPEN_INTEREST"] < 0:
-        errors.append("MIN_OPEN_INTEREST must be >= 0.")
-    if cfg["MIN_VOLUME"] < 0:
-        errors.append("MIN_VOLUME must be >= 0.")
-
-    if cfg["MAX_SPREAD_PCT"] <= 0 or cfg["MAX_SPREAD_PCT"] > 100:
-        errors.append("MAX_SPREAD_PCT must be in (0, 100].")
-
-    if cfg["MIN_ABS_DELTA"] < 0 or cfg["MIN_ABS_DELTA"] > 1:
-        errors.append("MIN_ABS_DELTA must be in [0, 1].")
-    if cfg["MAX_ABS_DELTA"] < 0 or cfg["MAX_ABS_DELTA"] > 1:
-        errors.append("MAX_ABS_DELTA must be in [0, 1].")
     if cfg["MAX_ABS_DELTA"] < cfg["MIN_ABS_DELTA"]:
         errors.append("MAX_ABS_DELTA must be >= MIN_ABS_DELTA.")
 
-    if cfg["MAX_EXPIRATIONS_PER_SYMBOL"] < 1 or cfg["MAX_EXPIRATIONS_PER_SYMBOL"] > 24:
-        errors.append("MAX_EXPIRATIONS_PER_SYMBOL must be in [1, 24].")
-    if cfg["MAX_CONTRACTS_PER_SYMBOL"] < 1 or cfg["MAX_CONTRACTS_PER_SYMBOL"] > 50:
-        errors.append("MAX_CONTRACTS_PER_SYMBOL must be in [1, 50].")
-    if cfg["OPTIONS_REQUEST_TIMEOUT"] < 3 or cfg["OPTIONS_REQUEST_TIMEOUT"] > 120:
-        errors.append("OPTIONS_REQUEST_TIMEOUT must be in [3, 120].")
-    if cfg["OPTIONS_MAX_RETRIES"] < 1 or cfg["OPTIONS_MAX_RETRIES"] > 20:
-        errors.append("OPTIONS_MAX_RETRIES must be in [1, 20].")
-    if cfg["COMMISSION_PER_CONTRACT"] < 0 or cfg["COMMISSION_PER_CONTRACT"] > 25:
-        errors.append("COMMISSION_PER_CONTRACT must be in [0, 25].")
-    if cfg["SLIPPAGE_PCT_OF_SPREAD"] < 0 or cfg["SLIPPAGE_PCT_OF_SPREAD"] > 100:
-        errors.append("SLIPPAGE_PCT_OF_SPREAD must be in [0, 100].")
-    if cfg["MAX_SPREAD_ABS"] <= 0 or cfg["MAX_SPREAD_ABS"] > 25:
-        errors.append("MAX_SPREAD_ABS must be in (0, 25].")
-    if cfg["RISK_FREE_RATE"] < -0.05 or cfg["RISK_FREE_RATE"] > 0.25:
-        errors.append("RISK_FREE_RATE must be in [-0.05, 0.25].")
-    if cfg["DIVIDEND_YIELD"] < 0 or cfg["DIVIDEND_YIELD"] > 0.25:
-        errors.append("DIVIDEND_YIELD must be in [0, 0.25].")
+    cfg.setdefault("FILTER_UPTRENDS", True)
+    errors.extend(
+        f"{key} must be true/false."
+        for key in SCREENING_CONFIG_FLAGS
+        if not isinstance(cfg[key], bool)
+    )
 
-    if cfg["MIN_IV_RANK"] < 0 or cfg["MIN_IV_RANK"] > 1.0:
-        errors.append("MIN_IV_RANK must be in [0, 1.0].")
-
-    if not isinstance(cfg["FILTER_DOWNTRENDS"], bool):
-        errors.append("FILTER_DOWNTRENDS must be true/false.")
-
-    if "FILTER_UPTRENDS" not in cfg:
-        cfg["FILTER_UPTRENDS"] = True
-    if not isinstance(cfg["FILTER_UPTRENDS"], bool):
-        errors.append("FILTER_UPTRENDS must be true/false.")
-
-    if not isinstance(cfg["EXCLUDE_EARNINGS_BEFORE_EXPIRY"], bool):
-        errors.append("EXCLUDE_EARNINGS_BEFORE_EXPIRY must be true/false.")
-
-    if cfg["FORECAST_HV_WEIGHT"] < 0 or cfg["FORECAST_HV_WEIGHT"] > 1:
-        errors.append("FORECAST_HV_WEIGHT must be in [0, 1].")
-    if cfg["FORECAST_IV_HAIRCUT"] <= 0 or cfg["FORECAST_IV_HAIRCUT"] > 2:
-        errors.append("FORECAST_IV_HAIRCUT must be in (0, 2].")
-    if cfg["REAL_WORLD_DRIFT"] < -0.5 or cfg["REAL_WORLD_DRIFT"] > 0.5:
-        errors.append("REAL_WORLD_DRIFT must be in [-0.5, 0.5].")
-    if cfg["PORTFOLIO_MAX_POSITIONS"] < 0 or cfg["PORTFOLIO_MAX_POSITIONS"] > 100:
-        errors.append("PORTFOLIO_MAX_POSITIONS must be in [0, 100].")
-    if cfg["PORTFOLIO_MAX_PER_SECTOR"] < 0 or cfg["PORTFOLIO_MAX_PER_SECTOR"] > 100:
-        errors.append("PORTFOLIO_MAX_PER_SECTOR must be in [0, 100].")
-    if cfg["PORTFOLIO_COLLATERAL_BUDGET"] < 0:
-        errors.append("PORTFOLIO_COLLATERAL_BUDGET must be >= 0.")
-    if (
-        cfg["PORTFOLIO_MAX_PCT_PER_POSITION"] < 0
-        or cfg["PORTFOLIO_MAX_PCT_PER_POSITION"] > 100
-    ):
-        errors.append("PORTFOLIO_MAX_PCT_PER_POSITION must be in [0, 100].")
-
-    for weight_key in SCORE_WEIGHT_KEYS:
-        if cfg[weight_key] < 0:
-            errors.append(f"{weight_key} must be >= 0.")
+    errors.extend(f"{key} must be >= 0." for key in SCORE_WEIGHT_KEYS if cfg[key] < 0)
     if sum(cfg[key] for key in SCORE_WEIGHT_KEYS) <= 0:
         errors.append("At least one SCORE_WEIGHT_* must be > 0.")
 
@@ -458,7 +438,6 @@ def get_session():
         adapter = HTTPAdapter(
             pool_connections=MAX_WORKERS * 2, pool_maxsize=MAX_WORKERS * 4
         )
-        session.mount("http://", adapter)
         session.mount("https://", adapter)
         _thread_local.session = session
     return session
@@ -547,6 +526,55 @@ def print_error_summary():
         print(f"- {label}: {count}")
 
 
+def _retry_after_seconds(response, default):
+    try:
+        return float(response.headers.get("Retry-After", str(default)))
+    except ValueError:
+        return float(default)
+
+
+def _handle_rate_limited(response, attempt, max_retries):
+    """Back off after an HTTP 429; returns the error to report if retries run out."""
+    _bump_error_stat("rate_limited_429")
+    retry_after = _retry_after_seconds(response, 1) + random.uniform(0.05, 0.25)
+    _on_rate_limited(retry_after)
+    print(f"Rate limited. Waiting {retry_after:.2f} seconds...")
+    debug_log(
+        f"HTTP 429 on attempt {attempt + 1}/{max_retries}; "
+        f"retry-after={retry_after:.2f}s"
+    )
+    _set_global_cooldown(retry_after)
+    return f"HTTP 429 (retry-after: {retry_after:.2f}s)"
+
+
+def _handle_server_error(response, attempt, max_retries):
+    """Back off after an HTTP 5xx; returns the error to report if retries run out."""
+    _bump_error_stat("http_5xx")
+    body_snippet = _shorten_response_text(response.text)
+    if "Too Many Requests" in response.text:
+        # Edge/CDN rate-limit disguised as a 500 — treat like a 429.
+        _bump_error_stat("rate_limited_429")
+        retry_after = max(_retry_after_seconds(response, 5), 5.0) + random.uniform(0.5, 2.0)
+        _on_rate_limited(retry_after)
+        _set_global_cooldown(retry_after)
+        print(f"Edge rate-limited (HTTP 500). Waiting {retry_after:.2f} seconds...")
+        debug_log(
+            f"HTTP 500 'Too Many Requests' on attempt {attempt + 1}/{max_retries}; "
+            f"retry-after={retry_after:.2f}s; body={body_snippet}"
+        )
+        time.sleep(retry_after)
+        return f"HTTP 500 Edge rate-limited (retry-after: {retry_after:.2f}s)"
+
+    backoff = min(0.52 * (2**attempt), 5.0)
+    debug_log(
+        f"HTTP {response.status_code} on attempt {attempt + 1}/{max_retries}; "
+        f"backoff={backoff:.2f}s; body={body_snippet}"
+    )
+    _set_global_cooldown(backoff)
+    time.sleep(backoff)
+    return f"HTTP {response.status_code}: {body_snippet}"
+
+
 def safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES):
     cached = _read_cache(url)
     if cached is not None:
@@ -561,53 +589,11 @@ def safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES):
         try:
             response = get_session().get(url, timeout=timeout)
             if response.status_code == 429:
-                _bump_error_stat("rate_limited_429")
-                retry_after_raw = response.headers.get("Retry-After", "1")
-                try:
-                    retry_after = float(retry_after_raw)
-                except ValueError:
-                    retry_after = 1.0
-                retry_after += random.uniform(0.05, 0.25)
-                _on_rate_limited(retry_after)
-                print(f"Rate limited. Waiting {retry_after:.2f} seconds...")
-                debug_log(
-                    f"HTTP 429 on attempt {attempt + 1}/{max_retries}; "
-                    f"retry-after={retry_after:.2f}s"
-                )
-                _set_global_cooldown(retry_after)
-                last_error = f"HTTP 429 (retry-after: {retry_after:.2f}s)"
+                last_error = _handle_rate_limited(response, attempt, max_retries)
                 continue
 
             if response.status_code >= 500:
-                _bump_error_stat("http_5xx")
-                body_snippet = _shorten_response_text(response.text)
-                if "Too Many Requests" in response.text:
-                    # Edge/CDN rate-limit disguised as a 500 — treat like a 429.
-                    _bump_error_stat("rate_limited_429")
-                    retry_after_raw = response.headers.get("Retry-After", "5")
-                    try:
-                        retry_after = float(retry_after_raw)
-                    except ValueError:
-                        retry_after = 5.0
-                    retry_after = max(retry_after, 5.0) + random.uniform(0.5, 2.0)
-                    _on_rate_limited(retry_after)
-                    _set_global_cooldown(retry_after)
-                    print(f"Edge rate-limited (HTTP 500). Waiting {retry_after:.2f} seconds...")
-                    debug_log(
-                        f"HTTP 500 'Too Many Requests' on attempt {attempt + 1}/{max_retries}; "
-                        f"retry-after={retry_after:.2f}s; body={body_snippet}"
-                    )
-                    last_error = f"HTTP 500 Edge rate-limited (retry-after: {retry_after:.2f}s)"
-                    time.sleep(retry_after)
-                else:
-                    backoff = min(0.52 * (2**attempt), 5.0)
-                    debug_log(
-                        f"HTTP {response.status_code} on attempt {attempt + 1}/{max_retries}; "
-                        f"backoff={backoff:.2f}s; body={body_snippet}"
-                    )
-                    _set_global_cooldown(backoff)
-                    last_error = f"HTTP {response.status_code}: {body_snippet}"
-                    time.sleep(backoff)
+                last_error = _handle_server_error(response, attempt, max_retries)
                 continue
 
             # Do not retry most client errors (invalid/unsupported symbol, bad request, etc.)
@@ -644,6 +630,38 @@ def safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES):
     return None
 
 
+def _screen_quote(item, now_dt):
+    """Candidate dict for a quote that passes the price/liquidity screen, else ``None``."""
+    price = item.get("regularMarketPrice")
+    avg_volume_3m = int(_to_float(item.get("averageDailyVolume3Month")) or 0)
+    market_cap = int(_to_float(item.get("marketCap")) or 0)
+    dividend_yield = _to_float(item.get("trailingAnnualDividendYield")) or 0.0
+    fifty_day_average = _to_float(item.get("fiftyDayAverage"))
+    next_earnings_dt = _extract_next_earnings_dt(item, now_dt)
+    ex_dividend_date_dt = _parse_expiration(item.get("dividendDate"))
+    trailing_annual_dividend_rate = _to_float(item.get("trailingAnnualDividendRate")) or 0.0
+    passes_screen = (
+        price is not None
+        and price < PRICE_LIMIT
+        and avg_volume_3m >= MIN_STOCK_AVG_VOLUME
+        and market_cap >= MIN_MARKET_CAP
+    )
+    if not passes_screen:
+        return None
+    return {
+        "symbol": item["symbol"],
+        "price": price,
+        "name": item.get("shortName", ""),
+        "averageDailyVolume3Month": avg_volume_3m,
+        "marketCap": market_cap,
+        "dividend_yield": dividend_yield,
+        "fifty_day_average": fifty_day_average,
+        "next_earnings_dt": next_earnings_dt,
+        "ex_dividend_date_dt": ex_dividend_date_dt,
+        "trailing_annual_dividend_rate": trailing_annual_dividend_rate,
+    }
+
+
 def batch_price_filter(tickers):
     candidates = []
     now_dt = datetime.now(timezone.utc)
@@ -659,39 +677,10 @@ def batch_price_filter(tickers):
             "dividendDate,trailingAnnualDividendRate"
         )
         data = safe_get(url)
-        if data:
-            for item in data:
-                price = item.get("regularMarketPrice")
-                avg_volume_3m = int(
-                    _to_float(item.get("averageDailyVolume3Month")) or 0
-                )
-                market_cap = int(_to_float(item.get("marketCap")) or 0)
-                dividend_yield = _to_float(item.get("trailingAnnualDividendYield")) or 0.0
-                fifty_day_average = _to_float(item.get("fiftyDayAverage"))
-                next_earnings_dt = _extract_next_earnings_dt(item, now_dt)
-                ex_dividend_date_raw = item.get("dividendDate")
-                ex_dividend_date_dt = _parse_expiration(ex_dividend_date_raw)
-                trailing_annual_dividend_rate = _to_float(item.get("trailingAnnualDividendRate")) or 0.0
-                if (
-                    price is not None
-                    and price < PRICE_LIMIT
-                    and avg_volume_3m >= MIN_STOCK_AVG_VOLUME
-                    and market_cap >= MIN_MARKET_CAP
-                ):
-                    candidates.append(
-                        {
-                            "symbol": item["symbol"],
-                            "price": price,
-                            "name": item.get("shortName", ""),
-                            "averageDailyVolume3Month": avg_volume_3m,
-                            "marketCap": market_cap,
-                            "dividend_yield": dividend_yield,
-                            "fifty_day_average": fifty_day_average,
-                            "next_earnings_dt": next_earnings_dt,
-                            "ex_dividend_date_dt": ex_dividend_date_dt,
-                            "trailing_annual_dividend_rate": trailing_annual_dividend_rate,
-                        }
-                    )
+        for item in data or []:
+            candidate = _screen_quote(item, now_dt)
+            if candidate:
+                candidates.append(candidate)
         if SLEEP_TIME > 0:
             time.sleep(SLEEP_TIME)
     return candidates
@@ -774,20 +763,16 @@ def calculate_rvi(series, std_period=10, smooth_period=14):
     avg_up = up_series.ewm(alpha=1 / smooth_period, adjust=False).mean()
     avg_down = down_series.ewm(alpha=1 / smooth_period, adjust=False).mean()
 
-    rvi = 100 * (avg_up / (avg_up + avg_down))
+    rvi = 100 * (avg_up / avg_up.add(avg_down))
     return rvi
 
 
-def fetch_historical_indicators(symbol):
-    """Fetch historical prices and compute technical + realised-volatility data."""
-    from datetime import datetime, timedelta
+def _finite_or_none(value):
+    return float(value) if not np.isnan(value) else None
 
-    to_date = datetime.now().strftime("%Y-%m-%d")
-    from_date = (datetime.now() - timedelta(days=HIST_DAYS)).strftime("%Y-%m-%d")
-    url = f"{HIST_URL}?ticker={symbol}&from={from_date}&to={to_date}&interval=1d"
-    data = safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES)
-    if not data:
-        return None
+
+def _price_frame(data):
+    """Clean ``close/high/low`` frame from the history payload, or ``None``."""
     # API returns {"meta": ..., "quotes": [...], ...} or a flat list
     if isinstance(data, dict):
         data = data.get("quotes") or data.get("prices") or []
@@ -806,21 +791,11 @@ def fetch_historical_indicators(symbol):
     df["high"] = pd.to_numeric(df["high"], errors="coerce")
     df["low"] = pd.to_numeric(df["low"], errors="coerce")
     df = df.dropna(subset=["close", "high", "low"]).reset_index(drop=True)
+    return df if len(df) >= 50 else None
 
-    if len(df) < 50:
-        return None
 
-    close = df["close"]
-
-    ema50 = calculate_ema(close, 50).iloc[-1]
-    rsi = calculate_rsi(close, 14).iloc[-1]
-    adx = calculate_adx(df, 14).iloc[-1]
-    rvi = calculate_rvi(close).iloc[-1]
-    macd_line, signal_line = calculate_macd(close)
-    macd_val = macd_line.iloc[-1]
-    signal_val = signal_line.iloc[-1]
-
-    # Compute historical volatility (annualized) for IV rank comparison
+def _volatility_stats(close):
+    """Annualised realised volatility (20d, 60d, 20d high/low) and clipped drift."""
     log_returns = np.log(close / close.shift(1)).dropna()
     hv_current = log_returns[-20:].std() * np.sqrt(252)  # 20-day HV
     hv_long = log_returns[-60:].std() * np.sqrt(252) if len(log_returns) >= 60 else hv_current
@@ -835,24 +810,53 @@ def fetch_historical_indicators(symbol):
         realized_drift = float(np.clip(realized_drift, -0.25, 0.25))
     else:
         realized_drift = None
+    return {
+        "hv_current": _finite_or_none(hv_current),
+        "hv_long": _finite_or_none(hv_long),
+        "hv_high": _finite_or_none(hv_high),
+        "hv_low": _finite_or_none(hv_low),
+        "realized_drift": realized_drift,
+    }
+
+
+def fetch_historical_indicators(symbol):
+    """Fetch historical prices and compute technical + realised-volatility data."""
+    from datetime import datetime, timedelta
+
+    to_date = datetime.now().strftime("%Y-%m-%d")
+    from_date = (datetime.now() - timedelta(days=HIST_DAYS)).strftime("%Y-%m-%d")
+    url = f"{HIST_URL}?ticker={symbol}&from={from_date}&to={to_date}&interval=1d"
+    data = safe_get(url, timeout=REQUEST_TIMEOUT, max_retries=MAX_RETRIES)
+    if not data:
+        return None
+    df = _price_frame(data)
+    if df is None:
+        return None
+
+    close = df["close"]
+
+    ema50 = calculate_ema(close, 50).iloc[-1]
+    rsi = calculate_rsi(close, 14).iloc[-1]
+    adx = calculate_adx(df, 14).iloc[-1]
+    rvi = calculate_rvi(close).iloc[-1]
+    macd_line, signal_line = calculate_macd(close)
+    macd_val = macd_line.iloc[-1]
+    signal_val = signal_line.iloc[-1]
 
     closes = []
     if "date" in df.columns:
         closes = [(str(d)[:10], float(c)) for d, c in zip(df["date"], close)]
 
     return {
-        "ema50": float(ema50) if not np.isnan(ema50) else None,
-        "rsi": float(rsi) if not np.isnan(rsi) else None,
-        "adx": float(adx) if not np.isnan(adx) else None,
-        "rvi": float(rvi) if not np.isnan(rvi) else None,
-        "macd": float(macd_val) if not np.isnan(macd_val) else None,
-        "signal": float(signal_val) if not np.isnan(signal_val) else None,
+        "ema50": _finite_or_none(ema50),
+        "rsi": _finite_or_none(rsi),
+        "adx": _finite_or_none(adx),
+        "rvi": _finite_or_none(rvi),
+        "macd": _finite_or_none(macd_val),
+        "signal": _finite_or_none(signal_val),
         "price": float(close.iloc[-1]),
-        "hv_current": float(hv_current) if not np.isnan(hv_current) else None,
-        "hv_long": float(hv_long) if not np.isnan(hv_long) else None,
-        "hv_high": float(hv_high) if not np.isnan(hv_high) else None,
-        "hv_low": float(hv_low) if not np.isnan(hv_low) else None,
-        "realized_drift": realized_drift,
+        # Compute historical volatility (annualized) for IV rank comparison
+        **_volatility_stats(close),
         "closes": closes,
     }
 
@@ -937,38 +941,43 @@ def _safe_round(value, digits=2):
     return round(numeric, digits) if numeric is not None else None
 
 
+def _parse_timestamp(value):
+    ts = int(value)
+    if ts > 10_000_000_000:
+        ts = ts // 1000
+    return datetime.fromtimestamp(ts, tz=timezone.utc)
+
+
+def _parse_date_string(value):
+    value = value.strip()
+    if not value:
+        return None
+
+    for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+
+    try:
+        if value.endswith("Z"):
+            value = value[:-1] + "+00:00"
+        parsed = datetime.fromisoformat(value)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+    except ValueError:
+        debug_log(f"Could not parse expiration date: {value}")
+        return None
+
+
 def _parse_expiration(value):
     if value is None:
         return None
-
     if isinstance(value, (int, float)):
-        ts = int(value)
-        if ts > 10_000_000_000:
-            ts = ts // 1000
-        return datetime.fromtimestamp(ts, tz=timezone.utc)
-
+        return _parse_timestamp(value)
     if isinstance(value, str):
-        value = value.strip()
-        if not value:
-            return None
-
-        for fmt in ("%Y-%m-%d", "%Y/%m/%d"):
-            try:
-                return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
-            except ValueError:
-                pass
-
-        try:
-            if value.endswith("Z"):
-                value = value[:-1] + "+00:00"
-            parsed = datetime.fromisoformat(value)
-            if parsed.tzinfo is None:
-                return parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
-        except ValueError:
-            debug_log(f"Could not parse expiration date: {value}")
-            return None
-
+        return _parse_date_string(value)
     return None
 
 
@@ -1121,23 +1130,12 @@ def _extract_contracts(options_payload, option_type="put"):
     return contracts
 
 
-def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="put"):
-    symbol = symbol_data["symbol"]
-    price = _to_float(symbol_data.get("price"))
-    if price is None or price <= 0:
-        return None
+def _not_positive(value):
+    return value is None or value <= 0
 
-    strike = _to_float(option.get("strike"))
-    bid = _to_float(option.get("bid"))
-    ask = _to_float(option.get("ask"))
-    implied_volatility = _to_float(option.get("impliedVolatility"))
-    delta = _to_float(option.get("delta"))
-    open_interest = int(_to_float(option.get("openInterest")) or 0)
-    volume = int(_to_float(option.get("volume")) or 0)
 
-    if strike is None or strike <= 0:
-        return None
-
+def _priced_quote(bid, ask):
+    """``(premium, net_premium, spread_pct)`` for a sellable quote, else ``None``."""
     # A two-sided quote is mandatory: without a live bid there is nothing to sell
     # into, and lastPrice carries no spread information so the spread filters
     # below could not be applied.
@@ -1152,26 +1150,129 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
         slippage_pct_of_spread=SLIPPAGE_PCT_OF_SPREAD,
         round_trip=False,
     )
-    spread_abs = ask - bid
-    price_source = "mid"
-
-    if premium is None or premium <= 0:
+    if _not_positive(premium) or _not_positive(net_premium):
         return None
-    if net_premium is None or net_premium <= 0:
-        return None
+    return premium, net_premium, spread_pct
 
-    expiration = expiration_dt or _parse_expiration(option.get("expiration"))
-    dte = _dte_from_expiration(expiration, now_dt)
-    if dte is None or dte <= 0:
-        return None
 
-    next_earnings_dt = symbol_data.get("next_earnings_dt")
-    earnings_before_expiry = (
+def _earnings_before_expiry(next_earnings_dt, now_dt, expiration):
+    return (
         isinstance(next_earnings_dt, datetime)
         and next_earnings_dt >= now_dt
         and expiration is not None
         and next_earnings_dt.date() <= expiration.date()
     )
+
+
+def _estimated_dividend(symbol_data, price, per_stock_div_yield):
+    """Quarterly dividend estimate: annual rate / 4, else yield * price / 4."""
+    trailing_annual_dividend_rate = symbol_data.get("trailing_annual_dividend_rate", 0.0)
+    if trailing_annual_dividend_rate > 0.0:
+        return trailing_annual_dividend_rate / 4.0
+    if per_stock_div_yield > 0.0:
+        return (price * per_stock_div_yield) / 4.0
+    return 0.0
+
+
+def _ex_dividend_risk(symbol_data, contract, now_dt, option_type):
+    """Ex-dividend warning: ``(ex_div_date_str, risk_level)`` for the contract."""
+    ex_div_dt = symbol_data.get("ex_dividend_date_dt")
+    if not (ex_div_dt and isinstance(ex_div_dt, datetime)):
+        return None, "NONE"
+
+    ex_div_date_str = ex_div_dt.strftime("%Y-%m-%d")
+    if ex_div_dt.tzinfo is None:
+        ex_div_dt_aware = ex_div_dt.replace(tzinfo=timezone.utc)
+    else:
+        ex_div_dt_aware = ex_div_dt.astimezone(timezone.utc)
+
+    # Only an ex-dividend date during the option contract's life matters
+    if not now_dt.date() <= ex_div_dt_aware.date() <= contract["expiration"].date():
+        return ex_div_date_str, "NONE"
+
+    price = contract["price"]
+    dividend_amount = _estimated_dividend(symbol_data, price, contract["div_yield"])
+    if option_type != "call":
+        return ex_div_date_str, "DIVIDEND_DROP"
+
+    extrinsic_value = contract["premium"] - max(price - contract["strike"], 0.0)
+    if dividend_amount > 0.0 and extrinsic_value < dividend_amount:
+        return ex_div_date_str, "HIGH"
+    return ex_div_date_str, "MEDIUM"
+
+
+def _failed_checks(contract, option_type):
+    """Names of the screening criteria the contract fails."""
+    price = contract["price"]
+    strike = contract["strike"]
+    monthly_yield_pct = contract["monthly_yield_pct"]
+    dte = contract["dte"]
+    is_otm = strike > price if option_type == "call" else strike < price
+    checks = {
+        f"Yield >= {TARGET_MONTHLY_YIELD_PCT:g}%/month": monthly_yield_pct is not None
+        and monthly_yield_pct >= TARGET_MONTHLY_YIELD_PCT,
+        f"Premium > {MIN_PREMIUM}": contract["net_premium"] > MIN_PREMIUM,
+        f"{MIN_DTE} <= DTE <= {MAX_DTE}": MIN_DTE <= dte <= MAX_DTE,
+        f"OTM >= {MIN_OTM_PCT}%": is_otm and contract["otm_pct"] >= MIN_OTM_PCT,
+        f"OI >= {MIN_OPEN_INTEREST}": contract["open_interest"] >= MIN_OPEN_INTEREST,
+        f"Volume >= {MIN_VOLUME}": contract["volume"] >= MIN_VOLUME,
+    }
+    if contract["spread_pct"] is not None:
+        checks[f"Spread <= {MAX_SPREAD_PCT}%"] = contract["spread_pct"] <= MAX_SPREAD_PCT
+    checks[f"Spread <= ${MAX_SPREAD_ABS:.2f}"] = contract["spread_abs"] <= MAX_SPREAD_ABS
+
+    if contract["delta"] is not None:
+        abs_delta = abs(contract["delta"])
+        checks[f"{MIN_ABS_DELTA:.2f} <= |Delta| <= {MAX_ABS_DELTA:.2f}"] = (
+            MIN_ABS_DELTA <= abs_delta <= MAX_ABS_DELTA
+        )
+
+    return [name for name, passed in checks.items() if not passed]
+
+
+def _status(failed):
+    return "PASS" if len(failed) == 0 else "NEAR"
+
+
+def _failed_criterion(failed):
+    return failed[0] if len(failed) == 1 else ""
+
+
+def _format_date(value):
+    return value.strftime("%Y-%m-%d") if isinstance(value, datetime) else None
+
+
+def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="put"):
+    symbol = symbol_data["symbol"]
+    price = _to_float(symbol_data.get("price"))
+    if _not_positive(price):
+        return None
+
+    strike = _to_float(option.get("strike"))
+    bid = _to_float(option.get("bid"))
+    ask = _to_float(option.get("ask"))
+    implied_volatility = _to_float(option.get("impliedVolatility"))
+    delta = _to_float(option.get("delta"))
+    open_interest = int(_to_float(option.get("openInterest")) or 0)
+    volume = int(_to_float(option.get("volume")) or 0)
+
+    if _not_positive(strike):
+        return None
+
+    priced = _priced_quote(bid, ask)
+    if priced is None:
+        return None
+    premium, net_premium, spread_pct = priced
+    spread_abs = ask - bid
+    price_source = "mid"
+
+    expiration = expiration_dt or _parse_expiration(option.get("expiration"))
+    dte = _dte_from_expiration(expiration, now_dt)
+    if _not_positive(dte):
+        return None
+
+    next_earnings_dt = symbol_data.get("next_earnings_dt")
+    earnings_before_expiry = _earnings_before_expiry(next_earnings_dt, now_dt, expiration)
     if EXCLUDE_EARNINGS_BEFORE_EXPIRY and earnings_before_expiry:
         _bump_error_stat("contracts_excluded_earnings")
         return None
@@ -1189,68 +1290,31 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
             option_type=option_type,
         )
 
-    # Ex-Dividend Risk Warning System
-    ex_div_dt = symbol_data.get("ex_dividend_date_dt")
-    ex_div_date_str = None
-    ex_div_risk = "NONE"
-
-    if ex_div_dt and isinstance(ex_div_dt, datetime):
-        ex_div_date_str = ex_div_dt.strftime("%Y-%m-%d")
-
-        if ex_div_dt.tzinfo is None:
-            ex_div_dt_aware = ex_div_dt.replace(tzinfo=timezone.utc)
-        else:
-            ex_div_dt_aware = ex_div_dt.astimezone(timezone.utc)
-
-        # Check if the ex-dividend date falls during the option contract's life
-        if now_dt.date() <= ex_div_dt_aware.date() <= expiration.date():
-            # Estimate quarterly dividend amount: Rate / 4 or Yield * Price / 4
-            trailing_annual_dividend_rate = symbol_data.get("trailing_annual_dividend_rate", 0.0)
-            if trailing_annual_dividend_rate > 0.0:
-                dividend_amount = trailing_annual_dividend_rate / 4.0
-            elif per_stock_div_yield > 0.0:
-                dividend_amount = (price * per_stock_div_yield) / 4.0
-            else:
-                dividend_amount = 0.0
-
-            if option_type == "call":
-                extrinsic_value = premium - max(price - strike, 0.0)
-                if dividend_amount > 0.0 and extrinsic_value < dividend_amount:
-                    ex_div_risk = "HIGH"
-                else:
-                    ex_div_risk = "MEDIUM"
-            else:
-                ex_div_risk = "DIVIDEND_DROP"
-
     # OTM% calculation differs for puts vs calls
-    if option_type == "call":
-        otm_pct = ((strike - price) / price) * 100
-    else:
-        otm_pct = ((price - strike) / price) * 100
+    otm_distance = strike - price if option_type == "call" else price - strike
+    otm_pct = (otm_distance / price) * 100
 
     collateral = collateral_per_share(strike, price, net_premium, option_type=option_type)
     monthly_yield_pct, annualized_yield_pct = simple_yields(net_premium, collateral, dte)
 
-    checks = {
-        f"Yield >= {TARGET_MONTHLY_YIELD_PCT:g}%/month": monthly_yield_pct is not None
-        and monthly_yield_pct >= TARGET_MONTHLY_YIELD_PCT,
-        f"Premium > {MIN_PREMIUM}": net_premium > MIN_PREMIUM,
-        f"{MIN_DTE} <= DTE <= {MAX_DTE}": MIN_DTE <= dte <= MAX_DTE,
-        f"OTM >= {MIN_OTM_PCT}%": (strike > price if option_type == "call" else strike < price) and otm_pct >= MIN_OTM_PCT,
-        f"OI >= {MIN_OPEN_INTEREST}": open_interest >= MIN_OPEN_INTEREST,
-        f"Volume >= {MIN_VOLUME}": volume >= MIN_VOLUME,
+    contract = {
+        "price": price,
+        "strike": strike,
+        "premium": premium,
+        "net_premium": net_premium,
+        "expiration": expiration,
+        "div_yield": per_stock_div_yield,
+        "dte": dte,
+        "otm_pct": otm_pct,
+        "monthly_yield_pct": monthly_yield_pct,
+        "open_interest": open_interest,
+        "volume": volume,
+        "spread_pct": spread_pct,
+        "spread_abs": spread_abs,
+        "delta": delta,
     }
-    if spread_pct is not None:
-        checks[f"Spread <= {MAX_SPREAD_PCT}%"] = spread_pct <= MAX_SPREAD_PCT
-    checks[f"Spread <= ${MAX_SPREAD_ABS:.2f}"] = spread_abs <= MAX_SPREAD_ABS
-
-    if delta is not None:
-        abs_delta = abs(delta)
-        checks[f"{MIN_ABS_DELTA:.2f} <= |Delta| <= {MAX_ABS_DELTA:.2f}"] = (
-            MIN_ABS_DELTA <= abs_delta <= MAX_ABS_DELTA
-        )
-
-    failed = [name for name, passed in checks.items() if not passed]
+    ex_div_date_str, ex_div_risk = _ex_dividend_risk(symbol_data, contract, now_dt, option_type)
+    failed = _failed_checks(contract, option_type)
 
     return {
         "Symbol": symbol,
@@ -1263,15 +1327,13 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
         "MACD": None,
         "Signal": None,
         "DiffPct": None,
-        "Status": "PASS" if len(failed) == 0 else "NEAR",
-        "Failed Criterion": failed[0] if len(failed) == 1 else "",
+        "Status": _status(failed),
+        FAILED_CRITERION: _failed_criterion(failed),
         "Strike": round(strike, 2),
         "Expiration": expiration.strftime("%Y-%m-%d") if expiration else None,
         "ExDividendDate": ex_div_date_str,
         "ExDivRisk": ex_div_risk,
-        "NextEarnings": next_earnings_dt.strftime("%Y-%m-%d")
-        if isinstance(next_earnings_dt, datetime)
-        else None,
+        "NextEarnings": _format_date(next_earnings_dt),
         "EarningsBeforeExpiry": earnings_before_expiry,
         "EarningsMovePct": None,
         "DTE": dte,
@@ -1300,30 +1362,180 @@ def _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type="
     }, failed
 
 
+def _needs_trend_check(price, fifty_day_avg, option_type):
+    if option_type == "put" and FILTER_DOWNTRENDS:
+        return fifty_day_avg is None or price < fifty_day_avg * 0.95
+    if option_type == "call" and FILTER_UPTRENDS:
+        return fifty_day_avg is None or price > fifty_day_avg * 1.08
+    return False
+
+
+def _trend_precheck(symbol, price, fifty_day_avg, option_type):
+    """Fetch history upfront when a trend pre-check is needed.
+
+    Returns ``(indicators, skip)``. Puts are only fetched when the price is
+    potentially below EMA50: if price >= 95% of the 50-day SMA the stock cannot
+    be flagged as a downtrend (below_ema is a prerequisite for every signal), so
+    the history fetch is deferred until after the options chain is evaluated.
+    """
+    if not _needs_trend_check(price, fifty_day_avg, option_type):
+        return None, False
+
+    indicators = fetch_historical_indicators(symbol)
+    if option_type == "put" and is_downtrend(indicators):
+        debug_log(f"Skipping {symbol}: strong downtrend detected")
+        return indicators, True
+    if option_type == "call" and is_uptrend(indicators):
+        debug_log(f"Skipping {symbol}: strong explosive uptrend detected")
+        return indicators, True
+    return indicators, False
+
+
+def _pre_evaluate_contracts(symbol_data, contracts, now_dt, option_type):
+    """First pass without indicator enrichment.
+
+    Only keeps potential PASS (0 failures) or NEAR (1 failure) candidates.
+    """
+    spread_keys = {f"Spread <= {MAX_SPREAD_PCT}%", f"Spread <= ${MAX_SPREAD_ABS:.2f}"}
+    pre_evaluated = []
+    for expiration_dt, option in contracts:
+        evaluated = _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type=option_type)
+        if not evaluated:
+            continue
+        contract_data, failed = evaluated
+        if len(failed) <= 1 and not spread_keys.intersection(failed):
+            pre_evaluated.append((contract_data, list(failed)))
+    return pre_evaluated
+
+
+def _apply_indicator_fields(contract_data, indicators):
+    if not indicators:
+        return
+    contract_data["EMA50"] = _safe_round(indicators.get("ema50"))
+    contract_data["ADX"] = _safe_round(indicators.get("adx"))
+    contract_data["RSI"] = _safe_round(indicators.get("rsi"))
+    contract_data["RVI"] = _safe_round(indicators.get("rvi"))
+    contract_data["MACD"] = _safe_round(indicators.get("macd"), 3)
+    contract_data["Signal"] = _safe_round(indicators.get("signal"), 3)
+    if indicators.get("ema50") and indicators.get("price"):
+        diff_pct = (
+            (indicators["price"] - indicators["ema50"]) / indicators["ema50"]
+        ) * 100
+        contract_data["DiffPct"] = _safe_round(diff_pct)
+
+
+def _iv_hv_percentile(iv, indicators):
+    if not indicators or iv is None:
+        return None
+    return _safe_round(
+        compute_iv_hv_percentile(iv, indicators.get("hv_low"), indicators.get("hv_high"))
+    )
+
+
+def _apply_risk_fields(contract_data, ctx):
+    """Attach risk metrics; returns the raw risk assessment."""
+    iv = contract_data.get("ImpliedVolatility")
+    t_years = years_to_expiration(
+        _parse_expiration(contract_data.get("Expiration")),
+        ctx["now_dt"],
+    )
+    earnings_before_expiry = bool(contract_data.get("EarningsBeforeExpiry"))
+    earnings_jump = ctx["earnings_jump"]
+    risk = assess_contract_risk(
+        ctx["price"],
+        contract_data.get("Strike"),
+        iv,
+        t_years,
+        _to_float(contract_data.get("NetPremium")),
+        ctx["indicators"],
+        option_type=ctx["option_type"],
+        earnings_before_expiry=earnings_before_expiry,
+        earnings_jump=earnings_jump,
+    )
+    pop = risk["pop"]
+    earnings_move = (
+        earnings_jump * 100.0
+        if earnings_before_expiry and earnings_jump is not None
+        else None
+    )
+
+    contract_data["ForecastVol"] = _safe_round(risk["forecast_vol"], 3)
+    contract_data["EarningsMovePct"] = _safe_round(earnings_move)
+    contract_data["VRPRatio"] = _safe_round(ctx["vrp_ratio"], 3)
+    contract_data["SigmaDistance"] = _safe_round(risk["sigma_distance"], 3)
+    contract_data["CreditRiskRatio"] = _safe_round(risk["credit_risk_ratio"], 3)
+    contract_data["PoP"] = _safe_round(pop * 100.0 if pop is not None else None, 1)
+    contract_data["EV"] = _safe_round(risk["ev"])
+    contract_data["ExpectedAssignmentLoss"] = _safe_round(risk["expected_loss"])
+    return risk
+
+
+def _enrich_contract(contract_data, failed, ctx):
+    """Second pass: technical indicators, IV/HV percentile, risk and score."""
+    indicators = ctx["indicators"]
+    iv_rank = ctx["iv_rank"]
+    _apply_indicator_fields(contract_data, indicators)
+
+    iv = contract_data.get("ImpliedVolatility")
+    contract_data["IVHVPercentile"] = _iv_hv_percentile(iv, indicators)
+    contract_data["ATMImpliedVolatility"] = _safe_round(ctx["atm_iv"], 3)
+    contract_data["IVRank"] = _safe_round(iv_rank)
+    contract_data["IVPercentile"] = _safe_round(ctx["iv_percentile"])
+    contract_data["IVRankObservationCount"] = ctx["iv_observation_count"]
+
+    risk = _apply_risk_fields(contract_data, ctx)
+
+    effective_iv_rank = (
+        iv_rank if iv_rank is not None else contract_data.get("IVHVPercentile")
+    )
+    if effective_iv_rank is not None and effective_iv_rank < MIN_IV_RANK:
+        failed.append(f"IVRank >= {MIN_IV_RANK:.0%}")
+
+    components = score_components(
+        sigma_dist=risk["sigma_distance"],
+        implied_vol=iv,
+        monthly_yield_pct=contract_data.get("MonthlyYieldPct"),
+        target_yield_pct=TARGET_MONTHLY_YIELD_PCT,
+        dte=contract_data.get("DTE"),
+        min_dte=MIN_DTE,
+        max_dte=MAX_DTE,
+        vrp=ctx["vrp_ratio"],
+        open_interest=contract_data.get("OpenInterest"),
+        volume=contract_data.get("Volume"),
+        spread_pct=contract_data.get("SpreadPct"),
+        max_spread_pct=MAX_SPREAD_PCT,
+    )
+    contract_data["Score"] = _safe_round(composite_score(components, SCORE_WEIGHTS), 1)
+    contract_data["Status"] = _status(failed)
+    contract_data[FAILED_CRITERION] = _failed_criterion(failed)
+
+
+def _contract_sort_key(row):
+    return (
+        row.get("Score") or 0.0,
+        row.get("MonthlyYieldPct") or 0.0,
+        row.get("OpenInterest") or 0,
+    )
+
+
+def _fetch_earnings_jump(symbol, indicators, pre_evaluated, now_dt):
+    if not any(row.get("EarningsBeforeExpiry") for row, _ in pre_evaluated):
+        return None
+    try:
+        return fetch_earnings_jump(symbol, indicators, as_of=now_dt)
+    except Exception as e:
+        debug_log(f"Earnings history unavailable for {symbol}: {e}")
+        return None
+
+
 def analyze_single_symbol_options(symbol_data, option_type="put"):
     symbol = symbol_data["symbol"]
     price = symbol_data.get("price") or 0.0
     fifty_day_avg = symbol_data.get("fifty_day_average")
 
-    # Fetch history upfront only when a downtrend pre-check is needed:
-    # puts + FILTER_DOWNTRENDS=True + price is potentially below EMA50.
-    # If price >= 95% of the 50-day SMA the stock cannot be flagged as a
-    # downtrend (below_ema is a prerequisite for every signal), so we defer
-    # the history fetch until after the options chain is evaluated.
-    indicators = None
-    if option_type == "put" and FILTER_DOWNTRENDS:
-        if fifty_day_avg is None or price < fifty_day_avg * 0.95:
-            indicators = fetch_historical_indicators(symbol)
-            if is_downtrend(indicators):
-                debug_log(f"Skipping {symbol}: strong downtrend detected")
-                return [], []
-
-    if option_type == "call" and FILTER_UPTRENDS:
-        if fifty_day_avg is None or price > fifty_day_avg * 1.08:
-            indicators = fetch_historical_indicators(symbol)
-            if is_uptrend(indicators):
-                debug_log(f"Skipping {symbol}: strong explosive uptrend detected")
-                return [], []
+    indicators, skip = _trend_precheck(symbol, price, fifty_day_avg, option_type)
+    if skip:
+        return [], []
 
     api_filter = "calls" if option_type == "call" else "puts"
     url = (
@@ -1361,18 +1573,7 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
         iv_history_key, atm_iv
     )
 
-    # First pass: evaluate contracts without indicator enrichment.
-    # Only keep potential PASS (0 failures) or NEAR (1 failure) candidates.
-    pre_evaluated = []
-    for expiration_dt, option in contracts:
-        evaluated = _evaluate_contract(symbol_data, expiration_dt, option, now_dt, option_type=option_type)
-        if not evaluated:
-            continue
-        contract_data, failed = evaluated
-        spread_keys = {f"Spread <= {MAX_SPREAD_PCT}%", f"Spread <= ${MAX_SPREAD_ABS:.2f}"}
-        if len(failed) <= 1 and not spread_keys.intersection(failed):
-            pre_evaluated.append((contract_data, list(failed)))
-
+    pre_evaluated = _pre_evaluate_contracts(symbol_data, contracts, now_dt, option_type)
     if not pre_evaluated:
         return [], []
 
@@ -1386,125 +1587,30 @@ def analyze_single_symbol_options(symbol_data, option_type="put"):
         if indicators
         else None
     )
-    vrp_ratio = variance_risk_premium(atm_iv, realized_vol)
+    ctx = {
+        "price": price,
+        "now_dt": now_dt,
+        "option_type": option_type,
+        "indicators": indicators,
+        "atm_iv": atm_iv,
+        "iv_rank": iv_rank,
+        "iv_percentile": iv_percentile,
+        "iv_observation_count": iv_observation_count,
+        "vrp_ratio": variance_risk_premium(atm_iv, realized_vol),
+        "earnings_jump": _fetch_earnings_jump(symbol, indicators, pre_evaluated, now_dt),
+    }
 
-    earnings_jump = None
-    if any(row.get("EarningsBeforeExpiry") for row, _ in pre_evaluated):
-        try:
-            earnings_jump = fetch_earnings_jump(symbol, indicators, as_of=now_dt)
-        except Exception as e:
-            debug_log(f"Earnings history unavailable for {symbol}: {e}")
-
-    # Second pass: enrich with technical indicators + IV/HV percentile filter.
     passed_contracts = []
     near_contracts = []
     for contract_data, failed in pre_evaluated:
-        if indicators:
-            contract_data["EMA50"] = _safe_round(indicators.get("ema50"))
-            contract_data["ADX"] = _safe_round(indicators.get("adx"))
-            contract_data["RSI"] = _safe_round(indicators.get("rsi"))
-            contract_data["RVI"] = _safe_round(indicators.get("rvi"))
-            contract_data["MACD"] = _safe_round(indicators.get("macd"), 3)
-            contract_data["Signal"] = _safe_round(indicators.get("signal"), 3)
-            if indicators.get("ema50") and indicators.get("price"):
-                diff_pct = (
-                    (indicators["price"] - indicators["ema50"]) / indicators["ema50"]
-                ) * 100
-                contract_data["DiffPct"] = _safe_round(diff_pct)
-
-        iv = contract_data.get("ImpliedVolatility")
-        if indicators and iv is not None:
-            iv_hv_percentile = compute_iv_hv_percentile(
-                iv, indicators.get("hv_low"), indicators.get("hv_high")
-            )
-            contract_data["IVHVPercentile"] = _safe_round(iv_hv_percentile)
-        else:
-            contract_data["IVHVPercentile"] = None
-
-        contract_data["ATMImpliedVolatility"] = _safe_round(atm_iv, 3)
-        contract_data["IVRank"] = _safe_round(iv_rank)
-        contract_data["IVPercentile"] = _safe_round(iv_percentile)
-        contract_data["IVRankObservationCount"] = iv_observation_count
-
-        dte = contract_data.get("DTE")
-        strike = contract_data.get("Strike")
-        net_premium = _to_float(contract_data.get("NetPremium"))
-        t_years = years_to_expiration(
-            _parse_expiration(contract_data.get("Expiration")),
-            now_dt,
-        )
-        earnings_before_expiry = bool(contract_data.get("EarningsBeforeExpiry"))
-        risk = assess_contract_risk(
-            price,
-            strike,
-            iv,
-            t_years,
-            net_premium,
-            indicators,
-            option_type=option_type,
-            earnings_before_expiry=earnings_before_expiry,
-            earnings_jump=earnings_jump,
-        )
-        pop = risk["pop"]
-
-        contract_data["ForecastVol"] = _safe_round(risk["forecast_vol"], 3)
-        contract_data["EarningsMovePct"] = (
-            _safe_round(earnings_jump * 100.0)
-            if earnings_before_expiry and earnings_jump is not None
-            else None
-        )
-        contract_data["VRPRatio"] = _safe_round(vrp_ratio, 3)
-        contract_data["SigmaDistance"] = _safe_round(risk["sigma_distance"], 3)
-        contract_data["CreditRiskRatio"] = _safe_round(risk["credit_risk_ratio"], 3)
-        contract_data["PoP"] = _safe_round(pop * 100.0 if pop is not None else None, 1)
-        contract_data["EV"] = _safe_round(risk["ev"])
-        contract_data["ExpectedAssignmentLoss"] = _safe_round(risk["expected_loss"])
-
-        effective_iv_rank = (
-            iv_rank if iv_rank is not None else contract_data.get("IVHVPercentile")
-        )
-        if effective_iv_rank is not None and effective_iv_rank < MIN_IV_RANK:
-            failed.append(f"IVRank >= {MIN_IV_RANK:.0%}")
-
-        components = score_components(
-            sigma_dist=risk["sigma_distance"],
-            implied_vol=iv,
-            monthly_yield_pct=contract_data.get("MonthlyYieldPct"),
-            target_yield_pct=TARGET_MONTHLY_YIELD_PCT,
-            dte=dte,
-            min_dte=MIN_DTE,
-            max_dte=MAX_DTE,
-            vrp=vrp_ratio,
-            open_interest=contract_data.get("OpenInterest"),
-            volume=contract_data.get("Volume"),
-            spread_pct=contract_data.get("SpreadPct"),
-            max_spread_pct=MAX_SPREAD_PCT,
-        )
-        contract_data["Score"] = _safe_round(composite_score(components, SCORE_WEIGHTS), 1)
-        contract_data["Status"] = "PASS" if len(failed) == 0 else "NEAR"
-        contract_data["Failed Criterion"] = failed[0] if len(failed) == 1 else ""
-
+        _enrich_contract(contract_data, failed, ctx)
         if len(failed) == 0:
             passed_contracts.append(contract_data)
         elif len(failed) == 1:
             near_contracts.append(contract_data)
 
-    passed_contracts.sort(
-        key=lambda row: (
-            row.get("Score") or 0.0,
-            row.get("MonthlyYieldPct") or 0.0,
-            row.get("OpenInterest") or 0,
-        ),
-        reverse=True,
-    )
-    near_contracts.sort(
-        key=lambda row: (
-            row.get("Score") or 0.0,
-            row.get("MonthlyYieldPct") or 0.0,
-            row.get("OpenInterest") or 0,
-        ),
-        reverse=True,
-    )
+    passed_contracts.sort(key=_contract_sort_key, reverse=True)
+    near_contracts.sort(key=_contract_sort_key, reverse=True)
 
     return passed_contracts[:MAX_CONTRACTS_PER_SYMBOL], near_contracts[
         :MAX_CONTRACTS_PER_SYMBOL
@@ -1680,7 +1786,7 @@ def main():
             "ADX",
             "DiffPct",
             "Score",
-            "Failed Criterion",
+            FAILED_CRITERION,
         ]
         available_cols = [c for c in cols if c in df.columns]
         print(df[available_cols].to_string(index=False))

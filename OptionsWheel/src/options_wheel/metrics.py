@@ -378,7 +378,7 @@ def max_monthly_yield_for_delta(abs_delta, dte, implied_vol, risk_free_rate=0.04
     Used to warn about configurations that ask for a premium level which simply
     does not exist at the configured delta cap.
     """
-    if not (0 < abs_delta < 1) or dte <= 0 or implied_vol <= 0:
+    if abs_delta <= 0 or abs_delta >= 1 or dte <= 0 or implied_vol <= 0:
         return None
 
     t_years = dte / 365.0

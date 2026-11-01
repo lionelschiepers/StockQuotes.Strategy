@@ -84,9 +84,14 @@ Contracts re-listed by several daily scans are counted once (earliest scan).
 - `deploy-pages.yml` republishes the dashboard when `web/` or `config/`
   change, using the latest outputs from `ow-data`.
 - `tests.yml` runs the test suite on pushes and pull requests.
+- CI installs `OptionsWheel/requirements.lock` (pinned versions with hashes,
+  wheels only). After changing `requirements.txt`, regenerate it from
+  `OptionsWheel/` with
+  `uv pip compile requirements.txt --universal --python-version 3.12 --generate-hashes --output-file requirements.lock`.
 
 To bring the CI history into a local checkout (merges IV history by date and
-copies scans without overwriting local files):
+copies scans without overwriting local files). `datasync` only accepts a data
+checkout inside the folder that contains this repository, such as `../ow-data`:
 
 ```bash
 git fetch origin ow-data
